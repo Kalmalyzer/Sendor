@@ -17,10 +17,25 @@
 			{% set id = file['id'] %}
 			{% set size = file['size'] %}
 			{% set timestamp = file['timestamp'] %}
-			<tr>
+			{% set row_id = "file_" + id %}
+			<tr id="{{ row_id }}">
 				{% if actions %}
 				<td>
 					<a href="distribute.html/{{ id }}" class="btn btn-default">Distribute</a>
+					{% set delete_button_id = row_id + "_delete_button" %}
+					<button id="{{ delete_button_id }}" class="btn btn-default">Delete</button>
+					<script>
+
+					var delete_file = function delete_file(id, delete_button_id) {
+						$.post("/api/file_stash/" + id + "/delete", function () {
+								$("#" + delete_button_id).attr("disabled", true);
+							})
+							.fail(function() { alert("failed") });
+						};
+
+					$("#{{delete_button_id}}").click(function(){delete_file("{{ id }}", "{{delete_button_id}}")});
+
+					</script>
 				</td>
 				{% endif %}
 				<td>
@@ -36,4 +51,5 @@
 		{% endfor %}
 	</tbody>
 </table>
+
 {% endmacro %}

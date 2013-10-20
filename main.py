@@ -37,9 +37,9 @@ def create_ui(upload_folder):
 			g_sendor_queue.cancel_current_job()
 
 		file_stash = sorted(g_file_stash.files.values(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
-		latest_uploaded_file = None
+		latest_uploaded_file = []
 		if len(file_stash) != 0:
-			latest_uploaded_file = file_stash[-1].to_json()
+			latest_uploaded_file = [file_stash[-1].to_json()]
 	
 		pending_jobs = []
 		for job in reversed(list(g_sendor_queue.pending_jobs.queue)):
@@ -54,7 +54,7 @@ def create_ui(upload_folder):
 			past_jobs.append(job.progress())
 
 		return render_template('index.html',
-			file_stash = [latest_uploaded_file],
+			file_stash = latest_uploaded_file,
 			pending_jobs = pending_jobs,
 			current_job = current_job,
 			past_jobs = past_jobs)
@@ -124,6 +124,17 @@ def create_ui(upload_folder):
 
 	return ui_app
 
+def create_api():
+
+	api_app = Blueprint('api', __name__)
+	@api_app.route('/file_stash/<file_id>/delete', methods = ['POST'])
+	def file_stash_delete(file_id):
+		g_file_stash.remove(file_id)
+		return ""
+	
+	return api_app
+
+	
 def load_config(host_config_filename, targets_config_filename):
 	global g_config
 	with open(host_config_filename) as file:
@@ -166,6 +177,8 @@ def main(host_config_filename, targets_config_filename):
 
 	ui_app = create_ui(upload_folder)
 	root.register_blueprint(url_prefix = '/ui', blueprint = ui_app)
+	api_app = create_api()
+	root.register_blueprint(url_prefix = '/api', blueprint = api_app)
 
 	@root.route('/')
 	@root.route('/index.html')
