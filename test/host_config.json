@@ -1,6 +1,7 @@
 {
 	"host" : "0.0.0.0",
 	"port" : "5000",
+	"host_description" : "test site",
 	
 	"upload_folder" : "test/upload",
 	"file_stash_folder" : "test/file_stash",

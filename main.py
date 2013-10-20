@@ -5,6 +5,7 @@ import logging.handlers
 import sys
 import os
 
+import flask.config
 from flask import Flask
 from flask import Blueprint, Response, redirect, url_for, render_template, request
 from werkzeug import secure_filename
@@ -161,6 +162,7 @@ def main(host_config_filename, targets_config_filename):
 	queue_folder = g_config['queue_folder']
 	
 	root = Flask(__name__)
+	root.config['host_description'] = g_config['host_description']
 
 	ui_app = create_ui(upload_folder)
 	root.register_blueprint(url_prefix = '/ui', blueprint = ui_app)

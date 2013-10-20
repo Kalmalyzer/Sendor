@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Sendor</title>
+	{% set application_name = "Sendor" %}
+	{% set application_deployment = config['host_description'] %}
+
+    <title>{{ application_name }} - {{ application_deployment }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <link href="/static/bootstrap-3.0.0/css/bootstrap.css" rel="stylesheet">
@@ -18,7 +21,7 @@
   <body>
     {% block header %}
     <div class="container">
-      <p><h3>Sendor</h3></p>
+      <p><h3>{{ application_name }} <small> [ {{ application_deployment }} ]</small></h3></p>
     </div>
     {% endblock %}
     <hr>
