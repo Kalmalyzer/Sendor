@@ -12,10 +12,13 @@ import traceback
 
 class SendorJob(object):
 
-	def __init__(self, tasks=[]):
+	def __init__(self, tasks=None):
 		self.id = None
 		self.work_directory = None
-		self.tasks = tasks
+		if tasks:
+			self.tasks = tasks
+		else:
+			self.tasks = []
 
 	def started(self):
 		pass

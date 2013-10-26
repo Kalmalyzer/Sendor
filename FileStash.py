@@ -6,28 +6,52 @@ import json
 import os
 import os.path
 import shutil
+import threading
 import unittest
 
 from fabric.api import local
 
-class StashedFile(object):
+class RefCount(object):
 
-	def __init__(self, id, root_path, filename, sha1sum, timestamp, size):
-		self.id = id
-		self.root_path = root_path
-		self.full_path_filename = os.path.join(root_path, sha1sum)
-		self.original_filename = filename
+	def __init__(self):
+		self.reference_count = 0
+
+	def add_ref(self):
+		self.reference_count += 1
+		return self.reference_count
+
+	def rem_ref(self):
+		self.reference_count -= 1
+		return self.reference_count
+		
+	def ref_count(self):
+		return self.reference_count
+
+class PhysicalFile(RefCount):
+
+	def __init__(self, sha1sum):
+		super(PhysicalFile, self).__init__()
 		self.sha1sum = sha1sum
-		self.timestamp = timestamp
-		self.size = size
 
 		if len(sha1sum) != 40:
 			raise Exception(sha1sum + " is not a valid SHA1 hash value")
-			
+
+class StashedFile(RefCount):
+
+	def __init__(self, id, root_path, filename, physical_file, timestamp, size):
+		super(StashedFile, self).__init__()
+		self.id = id
+		self.root_path = root_path
+		self.full_path_filename = os.path.join(root_path, physical_file.sha1sum)
+		self.original_filename = filename
+		self.physical_file = physical_file
+		self.timestamp = timestamp
+		self.size = size
+
 	def to_json(self):
 		return { 'id' : self.id,
 			'original_filename' : self.original_filename,
-			'sha1sum' : self.sha1sum,
+			'sha1sum' : self.physical_file.sha1sum,
 			'timestamp' : str(self.timestamp),
 			'size' : str(self.size) }
 
@@ -38,56 +62,63 @@ class FileStash(object):
 	def __init__(self, root_path):
 		if not os.path.exists(root_path):
 			raise Exception("Stash directory " + root_path + " does not exist")
+
+		self.index_lock = threading.RLock()
 		self.root_path = root_path
+		self.unique_id = 0
 		self.build_index()
 
 	def save_index(self):
-		filename = os.path.join(self.root_path, self.index_filename)
-		with open(filename, 'w') as index_file:
-			json.dump(self.files, index_file, default = lambda file: file.to_json())
+		with self.index_lock:
+			filename = os.path.join(self.root_path, self.index_filename)
+			with open(filename, 'w') as index_file:
+				json.dump(self.stashed_files, index_file, default = lambda file: file.to_json())
 			
 	def build_index(self):
 		""" Create an index for all the files in the stash directory tree """
 
-		# Locate all on-disk files in file stash directory; remove directories
-		old_files = {}
-		for root, dirs, filenames in os.walk(self.root_path):
-
-			for dir in dirs:
-				shutil.rmtree(os.path.join(root, dir))
+		with self.index_lock:
 		
-			for filename in filenames:
-				if filename != self.index_filename:
-					old_files[filename] = True;
+			# Load index file
+			old_index_filename = os.path.join(self.root_path, self.index_filename)
+			old_index = {}
+			try:
+				with open(old_index_filename) as old_index_file:
+					old_index = json.load(old_index_file)
+			except IOError as e:
+				pass
 
-		# Load index file
-		old_index_filename = os.path.join(self.root_path, self.index_filename)
-		old_index = {}
-		try:
-			with open(old_index_filename) as old_index_file:
-				old_index = json.load(old_index_file)
-		except IOError as e:
-			pass
+			# Locate all on-disk files in file stash directory; remove directories
+			on_disk_files = {}
+			for root, dirs, filenames in os.walk(self.root_path):
 
-		# Remove index entries if the corresponding file is missing on-disk
-		for id, entry in old_index.items():
-			if not entry['sha1sum'] in old_files:
-				del old_index[id]
-
-		# Remove files which are not referenced by any index entry
-		referenced_files = {}
-		for entry in old_index.values():
-			referenced_files[entry['sha1sum']] = True
+				for dir in dirs:
+					shutil.rmtree(os.path.join(root, dir))
 			
-		for file in old_files.keys():
-			if not file in referenced_files:
-				os.remove(os.path.join(self.root_path, file))
+				for filename in filenames:
+					if filename != self.index_filename:
+						on_disk_files[filename] = True;
+
+			# Remove index entries if the corresponding file is missing on-disk
+			for id, entry in old_index.items():
+				if not entry['sha1sum'] in on_disk_files:
+					del old_index[id]
+
+			# Remove files which are not referenced by any index entry
+			referenced_files = {}
+			for entry in old_index.values():
+				referenced_files[entry['sha1sum']] = True
 				
-		# Add all remaining index entries to stash
-		self.unique_id = 0
-		self.files = {}
-		for file in old_index.values():
-			self.add_to_index(file['original_filename'], file['sha1sum'], dateutil.parser.parse(file['timestamp']), file['size'])
+			for file in on_disk_files.keys():
+				if not file in referenced_files:
+					os.remove(os.path.join(self.root_path, file))
+					
+			# Add all remaining index entries to stash
+			self.physical_files = {}
+			self.stashed_files = {}
+			for file in old_index.values():
+				self.add_to_index(file['original_filename'], file['sha1sum'], dateutil.parser.parse(file['timestamp']), file['size'])
+				
 			
 		self.save_index()
 
@@ -95,20 +126,43 @@ class FileStash(object):
 		""" Add a new file to the index
 			The file should be present in the stash directory tree
 			"""
-		file = StashedFile(str(self.unique_id), self.root_path, filename, sha1sum, timestamp, size)
-		self.files[str(self.unique_id)] = file
-		self.unique_id = self.unique_id + 1
-		return file
+
+		def add_physical_file(self, sha1sum):
+			if not sha1sum in self.physical_files:
+				self.physical_files[sha1sum] = PhysicalFile(sha1sum)
+
+			self.physical_files[sha1sum].add_ref()
+			return self.physical_files[sha1sum]
+
+		def add_stashed_file(self, filename, physical_file, timestamp, size):
+			id = str(self.unique_id)
+			stashed_file = StashedFile(id, self.root_path, filename, physical_file, timestamp, size)
+			self.stashed_files[id] = stashed_file
+			self.unique_id += 1
+			return self.stashed_files[id]
+
+		physical_file = add_physical_file(self, sha1sum)
+		stashed_file = add_stashed_file(self, filename, physical_file, timestamp, size)
+
+		return stashed_file
 
 	def remove_from_index(self, id):
 		""" Remove a file from the index
 			The file will not be removed from the stash directory tree
 			"""
-		del self.files[id]
+		
+		def remove_stashed_file(self, id):
+			del self.stashed_files[id]
+			
+		def remove_physical_file(self, physical_file):
+			return physical_file.rem_ref()
 
-	def get(self, id):
-		""" Locate the index entry for a file, or return None if it does not exist """
-		return self.files.get(id)
+		if not id in self.stashed_files:
+			raise Exception("File not in stash")
+		else:
+			physical_file = self.stashed_files[id].physical_file
+			remove_stashed_file(self, id)
+			return remove_physical_file(self, physical_file) == 0
 
 	def add(self, original_path, filename, timestamp):
 		""" Add a file to the stash
@@ -116,20 +170,22 @@ class FileStash(object):
 			from its original location to the stash
 			Otherwise, the file is simply deleted from its original location
 			"""
-		original_file = os.path.join(original_path, filename)
+			
+		with self.index_lock:
+			original_file = os.path.join(original_path, filename)
 
-		sha1sum = local('sha1sum -b ' + original_file, capture = True)[:40]
-		size = os.stat(original_file).st_size
+			sha1sum = local('sha1sum -b ' + original_file, capture = True)[:40]
+			size = os.stat(original_file).st_size
 
-		file = self.add_to_index(filename, sha1sum, timestamp, size)
+			file = self.add_to_index(filename, sha1sum, timestamp, size)
 
-		if os.path.exists(file.full_path_filename):
-			os.remove(original_file)
-		else:
-			shutil.move(original_file, file.full_path_filename)
+			if os.path.exists(file.full_path_filename):
+				os.remove(original_file)
+			else:
+				shutil.move(original_file, file.full_path_filename)
 
-		self.save_index()
-		return file
+			self.save_index()
+			return file
 
 	def remove(self, id):
 		""" Remove a file from the stash
@@ -137,37 +193,68 @@ class FileStash(object):
 			If this is the last reference to the on-disk file, the on-disk file will be removed
 			"""
 
-		file = self.get(id)
-		sha1sum = file.sha1sum
-		full_path_filename = file.full_path_filename
-		self.remove_from_index(id)
-
-		found = False
-		for file in self.files.values():
-			if file.sha1sum == sha1sum:
-				found = True
+		with self.index_lock:
+			file = self.get(id)
+			full_path_filename = file.full_path_filename
+			if file.ref_count() != 0:
+				raise Exception("Attempted to remove stashed file with nonzero refcount")
+			else:
+				if self.remove_from_index(id):
+					os.remove(full_path_filename)
 				
-		if not found:
-			os.remove(full_path_filename)
+			self.save_index()
 
-		self.save_index()
+	def remove_all_unlocked_files(self):
+		with self.index_lock:
+			ids = self.stashed_files.keys()[:]
+			for id in ids:
+				try:
+					self.remove(id)
+				except:
+					pass
+	
+	def list(self):
+		with self.index_lock:
+			return self.stashed_files.values()[:]
+	
+	def get(self, id):
+		""" Locate the index entry for a file, or return None if it does not exist """
+		with self.index_lock:
+			return self.stashed_files.get(id)
 
-	def nuke(self):
-		""" Erase all files from stash """
-		shutil.rmtree(self.root_path)
-		os.mkdir(self.root_path)
-		self.build_index()
-		
+	def lock(self, id):
+		""" Protect a stashed file from deletion """
+		with self.index_lock:
+			stashed_file = self.get(id)
+			if not stashed_file:
+				raise Exception("Attempted to lock stashed file which does not exist")
+			else:
+				stashed_file.add_ref()
+				return stashed_file
+
+	def unlock(self, stashed_file):
+		""" Unprotect a stashed file from deletion
+			The marking is done using reference counts, so a file will only become deletable
+			when all lock() calls on it have been matched with unlock() calls """
+		with self.index_lock:
+			stashed_file.rem_ref()
+	
+
 class StashedFileUnitTest(unittest.TestCase):
 
 	def test_file(self):
 
 		self.assertRaises(Exception, StashedFile, 1, "root/path", "myfilename", "invalid_hash")
 
-		file = StashedFile(1, "root/path", "myfilename", "cf53e64d1bb75ce5a4e71324777d7ed6cc19c435", datetime.datetime.utcnow(), 1234)
-		self.assertEquals(file.full_path_filename, "root/path/cf53e64d1bb75ce5a4e71324777d7ed6cc19c435")
+		physical_file = PhysicalFile("cf53e64d1bb75ce5a4e71324777d7ed6cc19c435")
+		stashed_file = StashedFile(1, "root/path", "myfilename", physical_file, datetime.datetime.utcnow(), 1234)
+		self.assertEquals(stashed_file.full_path_filename, "root/path/cf53e64d1bb75ce5a4e71324777d7ed6cc19c435")
 
 class FileStashUnitTest(unittest.TestCase):
+
+	# File 1 & 4 have the same name
+	# File 3 & 5 & 6 have the same SHA1 hash
+	# File 5 & 6 are identical
 
 	file1_name = 'hello1.txt'
 	file1_sha1sum = 'a2abbbf0d432a8097fd7a4d421cc91881309cda2'
@@ -179,6 +266,8 @@ class FileStashUnitTest(unittest.TestCase):
 	file4_sha1sum = '77b8b233f03f1720c0642f6e1ce395fbfe0322ed'
 	file5_name = 'hello5.txt'
 	file5_sha1sum = 'ca44a076d1ac49f10ebb55949a9a16805af69bcd'
+	file6_name = 'hello5.txt'
+	file6_sha1sum = 'ca44a076d1ac49f10ebb55949a9a16805af69bcd'
 
 	def setUp(self):
 
@@ -188,47 +277,51 @@ class FileStashUnitTest(unittest.TestCase):
 
 	def test(self):
 
-		# Add two files to the stash
+		# Add two files to initial stash
 		file_stash_init = FileStash('unittest/file_stash')
 		local('echo "Hello World 1" > unittest/' + self.file1_name)
 		local('echo "Hello World 2" > unittest/' + self.file2_name)
 		file_stash_init.add('unittest', self.file1_name, datetime.datetime.utcnow())
 		file_stash_init.add('unittest', self.file2_name, datetime.datetime.utcnow())
-
-		# Create three temporary files outside of the stash
-		local('echo "Hello World 3" > unittest/' + self.file3_name)
-		local('echo "Hello World 4" > unittest/' + self.file4_name)
-		local('echo "Hello World 3" > unittest/' + self.file5_name)
-
+		# Initial stash will no longer be used from now on
+		
+		# Create main stash
 		file_stash = FileStash('unittest/file_stash')
 		# file1 and file2 should already exist in the file stash
-		self.assertEquals(len(file_stash.files), 2)
+		self.assertEquals(len(file_stash.stashed_files), 2)
 
 		# Files not in the stash should not yield any hits
 		self.assertEquals(file_stash.get(12345678), None)
 
-		# file4 has the same filename as file1
+		# file4 has the same filename as file1 but different content
 		# file3 and file5 have different names but identical content
+		# file5 and file6 are identical
 
+		# Create temporary files outside of the stash, and add them
+		local('echo "Hello World 3" > unittest/' + self.file3_name)
 		file3 = file_stash.add('unittest', self.file3_name, datetime.datetime.utcnow())
+		local('echo "Hello World 4" > unittest/' + self.file4_name)
 		file4 = file_stash.add('unittest', self.file4_name, datetime.datetime.utcnow())
+		local('echo "Hello World 3" > unittest/' + self.file5_name)
 		file5 = file_stash.add('unittest', self.file5_name, datetime.datetime.utcnow())
+		local('echo "Hello World 3" > unittest/' + self.file6_name)
+		file6 = file_stash.add('unittest', self.file6_name, datetime.datetime.utcnow())
 
 		file3_id = file3.id
 		file4_id = file4.id
 		file5_id = file5.id
+		file6_id = file6.id
 
+		# Validate that identical files result in separate stashed file IDs
+		self.assertNotEquals(file5_id, file6_id)
+		
 		# Validate that all files have been added to the stash
-#		self.assertNotEquals(file_stash.get(self.file1_name, self.file1_sha1sum), None)
-#		self.assertNotEquals(file_stash.get(self.file2_name, self.file2_sha1sum), None)
+#		self.assertNotEquals(file_stash.get(file1_id), None)
+#		self.assertNotEquals(file_stash.get(file2_id), None)
 		self.assertNotEquals(file_stash.get(file3_id), None)
 		self.assertNotEquals(file_stash.get(file4_id), None)
 		self.assertNotEquals(file_stash.get(file5_id), None)
-
-		# There should be 5 files in the stash both before and after re-indexing
-		self.assertEquals(len(file_stash.files), 5)
-		file_stash.build_index()
-		self.assertEquals(len(file_stash.files), 5)
+		self.assertNotEquals(file_stash.get(file6_id), None)
 
 		# Remove two files with identical content
 		file_stash.remove(file3_id)
@@ -238,20 +331,25 @@ class FileStashUnitTest(unittest.TestCase):
 		self.assertEquals(file_stash.get(file3_id), None)
 		self.assertEquals(file_stash.get(file5_id), None)
 
+		# Ensure that it is not possible to remove locked files
+		file_stash.lock(file4_id)
+		self.assertRaises(Exception, file_stash.remove, file4_id)
+		file_stash.unlock(file4)
+		
 		# Remove one file which has identical name to another file 
 		file_stash.remove(file4_id)
 		self.assertEquals(file_stash.get(file4_id), None)
-#		self.assertNotEquals(file_stash.get(self.file1_name, self.file1_sha1sum), None)
+
+		# Remove one file which has identical name and contents to another file 
+		file_stash.remove(file6_id)
+		self.assertEquals(file_stash.get(file6_id), None)
 
 		# At this point, only the first two files should remain in the stash
-		file_stash.build_index()
-		self.assertEquals(len(file_stash.files), 2)
-#		self.assertNotEquals(file_stash.get(self.file1_name, self.file1_sha1sum), None)
-#		self.assertNotEquals(file_stash.get(self.file2_name, self.file2_sha1sum), None)
+		self.assertEquals(len(file_stash.stashed_files), 2)
 
 		# Remove all files from stash
-		file_stash.nuke()
-		self.assertEquals(len(file_stash.files), 0)
+		file_stash.remove_all_unlocked_files()
+		self.assertEquals(len(file_stash.stashed_files), 0)
 
 	def tearDown(self):
 		shutil.rmtree('unittest')

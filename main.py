@@ -25,6 +25,16 @@ g_targets = None
 
 g_config = {}
 
+class SendorDistributionJob(SendorJob):
+
+	def __init__(self, stashed_file, tasks):
+		super(SendorDistributionJob, self).__init__(tasks)
+		self.stashed_file = stashed_file
+
+	def completed(self):
+		g_file_stash.unlock(self.stashed_file)
+
+		
 def create_ui(upload_folder):
 
 	ui_app = Blueprint('ui', __name__)
@@ -36,7 +46,7 @@ def create_ui(upload_folder):
 		if request.args.get('cancel'):
 			g_sendor_queue.cancel_current_job()
 
-		file_stash = sorted(g_file_stash.files.values(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
+		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
 		latest_uploaded_file = []
 		if len(file_stash) != 0:
 			latest_uploaded_file = [file_stash[-1].to_json()]
@@ -64,9 +74,9 @@ def create_ui(upload_folder):
 
 		if request.args.get('clear'):
 			g_sendor_queue.cancel_current_job()
-			g_file_stash.nuke()
+			g_file_stash.remove_all_unlocked_files()
 	
-		file_stash = sorted(g_file_stash.files.values(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
+		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
 		file_stash_contents = []
 		for file in file_stash:
 			file_stash_contents.append(file.to_json())
@@ -106,7 +116,7 @@ def create_ui(upload_folder):
 
 			target_ids = request.form.getlist('target')
 			id = request.form.get('file')
-			stashed_file = g_file_stash.get(id)
+			stashed_file = g_file_stash.lock(id)
 
 			distribute_file_tasks = []
 			for id in target_ids:
@@ -115,7 +125,7 @@ def create_ui(upload_folder):
 				distribute_file_task.actions.extend(distribute_file_actions)
 				distribute_file_tasks.append(distribute_file_task)
 
-			job = SendorJob(distribute_file_tasks)
+			job = SendorDistributionJob(stashed_file, distribute_file_tasks)
 			g_sendor_queue.add(job)
 
 			return redirect('index.html')
