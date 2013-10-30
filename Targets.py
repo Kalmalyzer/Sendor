@@ -4,7 +4,7 @@ import logging
 import os
 import unittest
 
-from SendorQueue import SendorTask, SendorAction
+from SendorJob import SendorTask, SendorAction
 
 import target_distribution_methods
 
@@ -22,7 +22,7 @@ class LogDistributionAction(SendorAction):
 		self.filename = filename
 		self.target = target
 
-	def run(self):
+	def run(self, context):
 		distribution_logger.info(self.description + " distribution of " + self.filename + " to " + self.target['name'])
 
 
@@ -31,13 +31,13 @@ class Targets(object):
 	def __init__(self, targets):
 		self.targets = targets
 
-	def create_distribution_actions(self, task, source, filename, id):
+	def create_distribution_actions(self, source, filename, id):
 		if not id in self.targets:
 			raise Exception("id " + id + " does not exist in targets")
 
 		target = self.targets[id]
 		actions = [ LogDistributionAction("Started", filename, target),
-			target_distribution_methods.create_action(task, source, filename, target),
+			target_distribution_methods.create_action(source, filename, target),
 			LogDistributionAction("Completed", filename, target) ]
 
 		return actions
@@ -54,7 +54,7 @@ class test(unittest.TestCase):
 
 	def test(self):
 
-		self.targets.create_distribution_actions(SendorTask(), 'sourcedir/sourcefile', 'sourcefile', 'target2')
+		self.targets.create_distribution_actions('sourcedir/sourcefile', 'sourcefile', 'target2')
 
 if __name__ == '__main__':
 	unittest.main()

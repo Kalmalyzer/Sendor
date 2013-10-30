@@ -1,4 +1,5 @@
 
+import logging
 import json
 import os
 import shutil
@@ -11,19 +12,22 @@ import fabric.api
 from fabric.api import local, run, settings
 import fabric.network
 
-from SendorQueue import SendorTask, SendorAction
+from SendorJob import SendorTask, SendorAction, SendorActionContext
 
 class FabricAction(SendorAction):
 
-	def __init__(self, task):
-		super(FabricAction, self).__init__(task)
+	def __init__(self):
+		super(FabricAction, self).__init__()
 
 	def fabric_local(self, command):
 		with fabric.api.settings(warn_only=True):
 			result = local(command, capture=True)
-			self.task.append_details(command)
-			self.task.append_details(result)
-			self.task.append_details(result.stderr)
+
+			logger = logging.getLogger('fabric')
+			logger.info(command)
+			logger.info(result)
+			logger.info(result.stderr)
+
 			if result.failed:
 				raise Exception("Fabric command failed")
 			return result
@@ -31,23 +35,26 @@ class FabricAction(SendorAction):
 	def fabric_remote(self, command):
 		with fabric.api.settings(warn_only=True):
 			result = run(command)
-			self.task.append_details(command)
-			self.task.append_details(result)
-			self.task.append_details(result.stderr)
+
+			logger = logging.getLogger('fabric')
+			logger.info(command)
+			logger.info(result)
+			logger.info(result.stderr)
+
 			if result.failed:
 				raise Exception("Fabric command failed")
 			return result
-				
+
 class CopyFileAction(FabricAction):
 
-	def __init__(self, task, source, target):
-		super(CopyFileAction, self).__init__(task)
+	def __init__(self, source, target):
+		super(CopyFileAction, self).__init__()
 		self.source = source
 		self.target = target
 
-	def run(self):
-		source = self.task.translate_path(self.source)
-		target = self.task.translate_path(self.target)
+	def run(self, context):
+		source = context.translate_path(self.source)
+		target = context.translate_path(self.target)
 		self.fabric_local('cp ' + source + ' ' + target)
 
 	def string_description(self):
@@ -55,14 +62,14 @@ class CopyFileAction(FabricAction):
 
 class ScpSendFileAction(FabricAction):
 
-	def __init__(self, task, source, filename, target):
-		super(ScpSendFileAction, self).__init__(task)
+	def __init__(self, source, filename, target):
+		super(ScpSendFileAction, self).__init__()
 		self.source = source
 		self.filename = filename
 		self.target = target
 
-	def run(self):
-		source_path = self.task.translate_path(self.source)
+	def run(self, context):
+		source_path = context.translate_path(self.source)
 		target_path = self.target['user'] + '@' + self.target['host'] + ":" + self.filename
 		target_port = self.target['port']
 		key_file = self.target['private_key_file']
@@ -73,20 +80,20 @@ class ScpSendFileAction(FabricAction):
 
 class SftpSendFileAction(FabricAction):
 
-	def __init__(self, task, source, filename, target):
-		super(SftpSendFileAction, self).__init__(task)
+	def __init__(self, source, filename, target):
+		super(SftpSendFileAction, self).__init__()
 		self.source = source
 		self.filename = filename
 		self.target = target
 		self.transferred = None
 
-	def run(self):
+	def run(self, context):
 
 		def cb(transferred, total):
 			self.transferred = transferred
 			self.total = total
 
-		source_path = self.task.translate_path(self.source)
+		source_path = context.translate_path(self.source)
 
 		key_file = self.target['private_key_file']
 		key = paramiko.RSAKey.from_private_key_file(key_file)
@@ -104,18 +111,18 @@ class SftpSendFileAction(FabricAction):
 
 class ParallelScpSendFileAction(FabricAction):
 
-	def __init__(self, task, source, filename, target):
-		super(ParallelScpSendFileAction, self).__init__(task)
+	def __init__(self, source, filename, target):
+		super(ParallelScpSendFileAction, self).__init__()
 		self.source = source
 		self.filename = filename
 		self.target = target
 		self.transferred = None
 
-	def run(self):
+	def run(self, context):
 
-		source = self.task.translate_path(self.source)
+		source = context.translate_path(self.source)
 		num_parallel_transfers = int(self.target['max_parallel_transfers'])
-		temp_directory = self.task.work_directory
+		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 
@@ -156,18 +163,18 @@ class ParallelScpSendFileAction(FabricAction):
 
 class ParallelSftpSendFileAction(FabricAction):
 
-	def __init__(self, task, source, filename, target):
-		super(ParallelSftpSendFileAction, self).__init__(task)
+	def __init__(self, source, filename, target):
+		super(ParallelSftpSendFileAction, self).__init__()
 		self.source = source
 		self.filename = filename
 		self.target = target
 		self.transferred = None
 
-	def run(self):
+	def run(self, context):
 
-		source = self.task.translate_path(self.source)
+		source = context.translate_path(self.source)
 		num_parallel_transfers = int(self.target['max_parallel_transfers'])
-		temp_directory = self.task.work_directory
+		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 		
@@ -215,8 +222,8 @@ class CopyFileActionUnitTest(unittest.TestCase):
 
 	def test_copy_file_action(self):
 		self.assertFalse(os.path.exists('unittest/target'))
-		action = CopyFileAction(SendorTask(), 'unittest/source', 'unittest/target')
-		action.run()
+		action = CopyFileAction('unittest/source', 'unittest/target')
+		action.run(SendorActionContext('unittest'))
 		self.assertTrue(os.path.exists('unittest/target'))
 
 	def tearDown(self):
@@ -242,8 +249,8 @@ class SftpSendFileActionUnitTest(unittest.TestCase):
 
 		target = targets['ssh_localhost_target2']
 
-		action = SftpSendFileAction(SendorTask(), self.source_path, self.file_name, target)
-		action.run()
+		action = SftpSendFileAction(self.source_path, self.file_name, target)
+		action.run(SendorActionContext('unittest'))
 
 	def tearDown(self):
 		shutil.rmtree(self.root_path)
@@ -270,10 +277,8 @@ class ParallelSftpSendFileActionUnitTest(unittest.TestCase):
 
 		target = targets['ssh_localhost_target3']
 
-		task = SendorTask()
-		task.set_queue_info(1, self.temp_path)
-		action = ParallelSftpSendFileAction(task, self.source_path, self.file_name, target)
-		action.run()
+		action = ParallelSftpSendFileAction(self.source_path, self.file_name, target)
+		action.run(SendorActionContext(self.temp_path))
 
 	def tearDown(self):
 		shutil.rmtree(self.root_path)

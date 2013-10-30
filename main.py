@@ -1,4 +1,5 @@
 
+import datetime
 import json
 import logging
 import logging.handlers
@@ -10,11 +11,12 @@ from flask import Flask
 from flask import Blueprint, Response, redirect, url_for, render_template, request
 from werkzeug import secure_filename
 
-from SendorQueue import SendorQueue, SendorJob
+from SendorJob import SendorJob
+from SendorQueue import SendorQueue
 from FileStash import FileStash
 from Targets import Targets
 
-from tasks import StashFileTask, DistributeFileTask
+from tasks import DistributeFileTask
 
 logger = logging.getLogger('main')
 
@@ -56,8 +58,8 @@ def create_ui(upload_folder):
 			pending_jobs.append(job.progress())
 
 		current_job = None
-		if g_sendor_queue.current_job:
-			current_job = g_sendor_queue.current_job.progress()
+		if g_sendor_queue.worker.current_job:
+			current_job = g_sendor_queue.worker.current_job.progress()
 
 		past_jobs = []
 		for job in reversed(list(g_sendor_queue.past_jobs.queue)):
@@ -96,10 +98,7 @@ def create_ui(upload_folder):
 			upload_file_full_path = os.path.join(upload_folder, filename)
 			file.save(upload_file_full_path)
 
-			stash_file_task = StashFileTask(upload_folder, filename, g_file_stash)
-			job = SendorJob([stash_file_task])
-
-			g_sendor_queue.add(job)
+			g_file_stash.add(upload_folder, filename, datetime.datetime.utcnow())
 
 			return redirect('index.html')
 
@@ -121,7 +120,7 @@ def create_ui(upload_folder):
 			distribute_file_tasks = []
 			for id in target_ids:
 				distribute_file_task = DistributeFileTask(stashed_file.original_filename, id)
-				distribute_file_actions = g_targets.create_distribution_actions(distribute_file_task, stashed_file.full_path_filename, stashed_file.original_filename, id)
+				distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, id)
 				distribute_file_task.actions.extend(distribute_file_actions)
 				distribute_file_tasks.append(distribute_file_task)
 
@@ -181,7 +180,8 @@ def main(host_config_filename, targets_config_filename):
 	upload_folder = g_config['upload_folder']
 	file_stash_folder = g_config['file_stash_folder']
 	queue_folder = g_config['queue_folder']
-	
+	num_distribution_processes = int(g_config['num_distribution_processes'])
+
 	root = Flask(__name__)
 	root.config['host_description'] = g_config['host_description']
 
@@ -195,7 +195,7 @@ def main(host_config_filename, targets_config_filename):
 	def index():
 		return redirect('ui')
 
-	g_sendor_queue = SendorQueue(queue_folder)
+	g_sendor_queue = SendorQueue(num_distribution_processes, queue_folder)
 	g_file_stash = FileStash(file_stash_folder)
 	g_targets = Targets(g_config['targets'])
 

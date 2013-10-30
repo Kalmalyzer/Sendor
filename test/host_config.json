@@ -6,6 +6,7 @@
 	"upload_folder" : "test/upload",
 	"file_stash_folder" : "test/file_stash",
 	"queue_folder" : "test/queue",
+	"num_distribution_processes" : "4",
 	
 	"logging" : {
 		"output" : "stdout",
