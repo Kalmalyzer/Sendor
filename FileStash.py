@@ -38,9 +38,9 @@ class PhysicalFile(RefCount):
 
 class StashedFile(RefCount):
 
-	def __init__(self, id, root_path, filename, physical_file, timestamp, size):
+	def __init__(self, file_id, root_path, filename, physical_file, timestamp, size):
 		super(StashedFile, self).__init__()
-		self.id = id
+		self.file_id = file_id
 		self.root_path = root_path
 		self.full_path_filename = os.path.join(root_path, physical_file.sha1sum)
 		self.original_filename = filename
@@ -49,7 +49,7 @@ class StashedFile(RefCount):
 		self.size = size
 
 	def to_json(self):
-		return { 'id' : self.id,
+		return { 'id' : self.file_id,
 			'original_filename' : self.original_filename,
 			'sha1sum' : self.physical_file.sha1sum,
 			'timestamp' : str(self.timestamp),
@@ -307,10 +307,10 @@ class FileStashUnitTest(unittest.TestCase):
 		local('echo "Hello World 3" > unittest/' + self.file6_name)
 		file6 = file_stash.add('unittest', self.file6_name, datetime.datetime.utcnow())
 
-		file3_id = file3.id
-		file4_id = file4.id
-		file5_id = file5.id
-		file6_id = file6.id
+		file3_id = file3.file_id
+		file4_id = file4.file_id
+		file5_id = file5.file_id
+		file6_id = file6.file_id
 
 		# Validate that identical files result in separate stashed file IDs
 		self.assertNotEquals(file5_id, file6_id)
