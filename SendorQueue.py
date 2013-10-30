@@ -19,6 +19,8 @@ class SendorQueue():
 	def __init__(self, num_processes, work_directory):
 
 		self.work_directory = work_directory
+		self.job_work_directory = os.path.join(self.work_directory, 'current_job')
+		shutil.rmtree(self.job_work_directory, ignore_errors=True)
 		self.pending_jobs = Queue()
 		self.current_job = None
 		self.past_jobs = Queue()
@@ -26,13 +28,12 @@ class SendorQueue():
 
 	def add(self, job):
 		job_id = self.unique_id
-		job_work_directory = os.path.join(self.work_directory, 'current_job')
-		job.set_queue_info(job_id, job_work_directory)
+		job.set_queue_info(job_id, self.job_work_directory)
 		self.unique_id = self.unique_id + 1
 
 		task_id = 0
 		for task in job.tasks:
-			task_work_directory = os.path.join(job_work_directory, str(task_id))
+			task_work_directory = os.path.join(self.job_work_directory, str(task_id))
 			task.set_queue_info(task_id, task_work_directory)
 			task_id = task_id + 1
 
