@@ -97,25 +97,35 @@ class SftpSendFileAction(FabricAction):
 			self.total = total
 
 		context.progress("Connecting to SSH server")
-		source_path = context.translate_path(self.source)
-
-		key_file = self.target['private_key_file']
-		key = paramiko.RSAKey.from_private_key_file(key_file)
-		transport = paramiko.Transport((self.target['host'], int(self.target['port'])))
-		transport.connect(username = self.target['user'], pkey = key)
-		context.progress("Transferring file via SFTP")
-		sftp = paramiko.SFTPClient.from_transport(transport)
-		sftp.put(source_path, self.filename, callback=cb)
-
-		context.progress("Connecting to SSH server again")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			context.progress("Validating file integrity")
-			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
-			if target_sha1sum != self.sha1sum:
-				self.fabric_remote('rm ' + self.filename)
-				context.progress("File corrupted during transfer; removed from target location")
-				raise Exception("File corrupted during transfer")
+			context.progress("Checking if remote file already is up-to-date")
+			try:
+				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+			except:
+				target_sha1sum = None
+				
+			if target_sha1sum == self.sha1sum:
+				context.progress("Remote file is up-to-date; skipping transfer")
+			else:
+
+				context.progress("Connecting to SSH server")
+				source_path = context.translate_path(self.source)
+
+				key_file = self.target['private_key_file']
+				key = paramiko.RSAKey.from_private_key_file(key_file)
+				transport = paramiko.Transport((self.target['host'], int(self.target['port'])))
+				transport.connect(username = self.target['user'], pkey = key)
+				context.progress("Transferring file via SFTP")
+				sftp = paramiko.SFTPClient.from_transport(transport)
+				sftp.put(source_path, self.filename, callback=cb)
+
+				context.progress("Validating file integrity")
+				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+				if target_sha1sum != self.sha1sum:
+					self.fabric_remote('rm ' + self.filename)
+					context.progress("File corrupted during transfer; removed from target location")
+					raise Exception("File corrupted during transfer")
 
 		context.progress("Transfer complete")
 
@@ -193,63 +203,73 @@ class ParallelSftpSendFileAction(FabricAction):
 		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
-		
-		context.progress("Splitting original file into chunks")
-		self.fabric_local('split -d -n ' + str(num_chunks) + ' ' + source + ' ' + temp_file_prefix)
-		
-		context.progress("Transferring chunks using SFTP")
 
-		progress_lock = threading.Lock()
-		
-		context.completed_chunks = 0
-		context.total_chunks = num_chunks
-		
-		def transfer_file_thread_initializer(target):
-			key_file = target['private_key_file']
-			key = paramiko.RSAKey.from_private_key_file(key_file)
-			transport = paramiko.Transport((target['host'], int(target['port'])))
-			transport.connect(username = target['user'], pkey = key)
-			threadlocal.sftp = paramiko.SFTPClient.from_transport(transport)
-		
-		def transfer_file_thread(context, tempfile, targetfile, target):
-			threadlocal.sftp.put(tempfile, targetfile, callback=None)
-			with progress_lock:
-				context.completed_chunks += 1
-				ratio = int(100 * context.completed_chunks / context.total_chunks)
-				context.progress("Transferring chunks using SFTP - " + str(ratio) + "% done")
-
-		# Bugfix for http://bugs.python.org/issue10015
-		if not hasattr(threading.current_thread(), "_children"):
-			threading.current_thread()._children = weakref.WeakKeyDictionary()
-
-		thread_pool = multiprocessing.pool.ThreadPool(max_parallel_transfers, transfer_file_thread_initializer, (self.target, ))
-			
-		results = []
-		for i in range(num_chunks):
-			temp_filename_suffix = u'%02d' % i
-			tempfile = temp_file_prefix + temp_filename_suffix
-			targetfile = temp_filename_prefix + temp_filename_suffix
-			results.append(thread_pool.apply_async(transfer_file_thread, (context, tempfile, targetfile, self.target)))
-
-		thread_pool.close()
-
-		# Wait for all chunks to complete transfer, and re-raise any exceptions thrown inside those worker threads
-		for result in results:
-			result.get()
-
-		context.progress("Connecting to host via SSH")
+		context.progress("Connecting to SSH server")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			context.progress("Merging chunks to a single file")
-			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
-			context.progress("Removing chunks")
-			self.fabric_remote('rm ' + temp_filename_prefix + '??')
-			context.progress("Validating file integrity")
-			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
-			if target_sha1sum != self.sha1sum:
-				self.fabric_remote('rm ' + self.filename)
-				context.progress("File corrupted during transfer; removed from target location")
-				raise Exception("File corrupted during transfer")
+			context.progress("Checking if remote file already is up-to-date")
+			try:
+				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+			except:
+				target_sha1sum = None
+
+			if target_sha1sum == self.sha1sum:
+				context.progress("Remote file is up-to-date; skipping transfer")
+			else:
+		
+				context.progress("Splitting original file into chunks")
+				self.fabric_local('split -d -n ' + str(num_chunks) + ' ' + source + ' ' + temp_file_prefix)
+				
+				context.progress("Transferring chunks using SFTP")
+
+				progress_lock = threading.Lock()
+				
+				context.completed_chunks = 0
+				context.total_chunks = num_chunks
+				
+				def transfer_file_thread_initializer(target):
+					key_file = target['private_key_file']
+					key = paramiko.RSAKey.from_private_key_file(key_file)
+					transport = paramiko.Transport((target['host'], int(target['port'])))
+					transport.connect(username = target['user'], pkey = key)
+					threadlocal.sftp = paramiko.SFTPClient.from_transport(transport)
+				
+				def transfer_file_thread(context, tempfile, targetfile, target):
+					threadlocal.sftp.put(tempfile, targetfile, callback=None)
+					with progress_lock:
+						context.completed_chunks += 1
+						ratio = int(100 * context.completed_chunks / context.total_chunks)
+						context.progress("Transferring chunks using SFTP - " + str(ratio) + "% done")
+
+				# Bugfix for http://bugs.python.org/issue10015
+				if not hasattr(threading.current_thread(), "_children"):
+					threading.current_thread()._children = weakref.WeakKeyDictionary()
+
+				thread_pool = multiprocessing.pool.ThreadPool(max_parallel_transfers, transfer_file_thread_initializer, (self.target, ))
+					
+				results = []
+				for i in range(num_chunks):
+					temp_filename_suffix = u'%02d' % i
+					tempfile = temp_file_prefix + temp_filename_suffix
+					targetfile = temp_filename_prefix + temp_filename_suffix
+					results.append(thread_pool.apply_async(transfer_file_thread, (context, tempfile, targetfile, self.target)))
+
+				thread_pool.close()
+
+				# Wait for all chunks to complete transfer, and re-raise any exceptions thrown inside those worker threads
+				for result in results:
+					result.get()
+
+				context.progress("Merging chunks to a single file")
+				self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
+				context.progress("Removing chunks")
+				self.fabric_remote('rm ' + temp_filename_prefix + '??')
+				context.progress("Validating file integrity")
+				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+				if target_sha1sum != self.sha1sum:
+					self.fabric_remote('rm ' + self.filename)
+					context.progress("File corrupted during transfer; removed from target location")
+					raise Exception("File corrupted during transfer")
 
 		context.progress("Transfer complete")
 
