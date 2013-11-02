@@ -120,7 +120,7 @@ def create_ui(upload_folder):
 			distribute_file_tasks = []
 			for id in target_ids:
 				distribute_file_task = DistributeFileTask(stashed_file.original_filename, id)
-				distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, id)
+				distribute_file_actions = g_targets.create_distribution_actions(stashed_file, id)
 				distribute_file_task.actions.extend(distribute_file_actions)
 				distribute_file_tasks.append(distribute_file_task)
 
