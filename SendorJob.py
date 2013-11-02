@@ -1,4 +1,6 @@
 
+from abc import ABCMeta, abstractmethod
+
 
 class SendorJob(object):
 
@@ -22,6 +24,7 @@ class SendorJob(object):
 		for task in self.tasks[0:]:
 			status.append({ 'description' : task.string_description(),
 							'state' : task.string_state(),
+							'progress' : task.string_progress(),
 							'details' : task.string_details() })
 			
 		return status
@@ -40,6 +43,7 @@ class SendorTask(object):
 	
 	def __init__(self):
 		self.state = self.NOT_STARTED
+		self.progress = ""
 		self.details = ""
 		self.actions = []
 		self.task_id = None
@@ -85,11 +89,18 @@ class SendorTask(object):
 	def string_details(self):
 		return self.details
 
+	def string_progress(self):
+		return self.progress
+		
+	def set_progress(self, message):
+		self.progress = message
+
 	def append_details(self, string):
 		self.details = self.details + string + "\n"
 
 
 class SendorActionContext(object):
+	__metaclass__ = ABCMeta
 
 	def __init__(self, work_directory):
 		self.work_directory = work_directory
@@ -100,7 +111,13 @@ class SendorActionContext(object):
 		else:
 			return path
 
+	@abstractmethod
+	def progress(self, message):
+		return
+			
 class SendorAction(object):
-
+	__metaclass__ = ABCMeta
+	
+	@abstractmethod
 	def run(self, context):
-		raise Exception("Action needs to be implemented")
+		return

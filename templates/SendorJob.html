@@ -1,39 +1,38 @@
 
 {% macro SendorJob(tasks) %}
 <table class="table table-striped">
-  <tbody>
-    {% for task in tasks %}
-    {% set description = task['description'] %}
-    {% set state = task['state'] %}
-    {% set details = task['details'] %}
-    <tr>
-      <td>
-	<div>
-	  {{description}}
-	</div>
-	<div>
-	  {% if details != "" %}
-	  <pre>{{details}}</pre>
-	  {% endif %}
-	</div>
-      </td>
-      <td>
-	{% if state == 'not_started' %}
-	<button type="button" disabled="disabled" class="btn btn-default">Not started</button>
-	{% elif state == 'in_progress' %}
-	<button type="button" disabled="disabled" class="btn btn-warning">In progress</button>
-	{% elif state == 'completed' %}
-	<button type="button" disabled="disabled" class="btn btn-success">Done</button>
-	{% elif state == 'failed' %}
-	<button type="button" disabled="disabled" class="btn btn-danger">Failed</button>	
-	{% elif state == 'canceled' %}
-	<button type="button" disabled="disabled" class="btn btn-inverse">Canceled</button>	
-	{% else %}
-	Error: Unknown state!
-	{% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
+	<tbody>
+		{% for task in tasks %}
+		{% set description = task['description'] %}
+		{% set state = task['state'] %}
+		{% set progress = task['progress'] %}
+		{% set details = task['details'] %}
+		<tr>
+			<td>
+				  {{description}}: {{ progress }}
+				<div>
+					{% if details != "" %}
+					<pre>{{details}}</pre>
+					{% endif %}
+				</div>
+			</td>
+			<td>
+				{% if state == 'not_started' %}
+				<button type="button" disabled="disabled" class="btn btn-default">Not started</button>
+				{% elif state == 'in_progress' %}
+				<button type="button" disabled="disabled" class="btn btn-warning">In progress</button>
+				{% elif state == 'completed' %}
+				<button type="button" disabled="disabled" class="btn btn-success">Done</button>
+				{% elif state == 'failed' %}
+				<button type="button" disabled="disabled" class="btn btn-danger">Failed</button>	
+				{% elif state == 'canceled' %}
+				<button type="button" disabled="disabled" class="btn btn-inverse">Canceled</button>	
+				{% else %}
+				Error: Unknown state!
+				{% endif %}
+			</td>
+		</tr>
+		{% endfor %}
+	</tbody>
 </table>
 {% endmacro %}

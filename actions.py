@@ -53,9 +53,11 @@ class CopyFileAction(FabricAction):
 		self.target = target
 
 	def run(self, context):
+		context.progress("Copying file")
 		source = context.translate_path(self.source)
 		target = context.translate_path(self.target)
 		self.fabric_local('cp ' + source + ' ' + target)
+		context.progress("Copy completed")
 
 	def string_description(self):
 		return "Copy file " + self.source + " to " + self.target
@@ -69,11 +71,13 @@ class ScpSendFileAction(FabricAction):
 		self.target = target
 
 	def run(self, context):
+		context.progress("Transferring file using SCP")
 		source_path = context.translate_path(self.source)
 		target_path = self.target['user'] + '@' + self.target['host'] + ":" + self.filename
 		target_port = self.target['port']
 		key_file = self.target['private_key_file']
 		self.fabric_local('scp ' + ' -B -P ' + target_port + ' -i ' + key_file + ' ' + source_path + ' ' + target_path)
+		context.progress("Transfer completed")
 
 	def string_description(self):
 		return "Distribute to " + self.target['user']
@@ -93,14 +97,17 @@ class SftpSendFileAction(FabricAction):
 			self.transferred = transferred
 			self.total = total
 
+		context.progress("Connecting to SSH server")
 		source_path = context.translate_path(self.source)
 
 		key_file = self.target['private_key_file']
 		key = paramiko.RSAKey.from_private_key_file(key_file)
 		transport = paramiko.Transport((self.target['host'], int(self.target['port'])))
 		transport.connect(username = self.target['user'], pkey = key)
+		context.progress("Transferring file via SFTP")
 		sftp = paramiko.SFTPClient.from_transport(transport)
 		sftp.put(source_path, self.filename, callback=cb)
+		context.progress("Transfer complete")
 
 	def string_description(self):
 		if self.transferred:
@@ -126,7 +133,10 @@ class ParallelScpSendFileAction(FabricAction):
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 
+		context.progress("Splitting original file into chunks")
 		self.fabric_local('split -d -n ' + str(num_parallel_transfers) + ' ' + source + ' ' + temp_file_prefix)
+
+		context.progress("Transferring chunks using SCP")
 		
 		def transfer_file_thread(self, tempfile, targetfile, target):
 			source_path = tempfile
@@ -148,11 +158,15 @@ class ParallelScpSendFileAction(FabricAction):
 		for thread in threads:
 			thread.join()
 
+		context.progress("Connecting to host via SSH")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			print host_string
+			context.progress("Merging chunks to a single file")
 			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
+			context.progress("Removing chunks")
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
+
+		context.progress("Transfer complete")
 
 	def string_description(self):
 		if self.transferred:
@@ -178,8 +192,10 @@ class ParallelSftpSendFileAction(FabricAction):
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 		
+		context.progress("Splitting original file into chunks")
 		self.fabric_local('split -d -n ' + str(num_parallel_transfers) + ' ' + source + ' ' + temp_file_prefix)
 		
+		context.progress("Transferring chunks using SFTP")
 		def transfer_file_thread(tempfile, targetfile, target):
 			key_file = target['private_key_file']
 			key = paramiko.RSAKey.from_private_key_file(key_file)
@@ -201,11 +217,15 @@ class ParallelSftpSendFileAction(FabricAction):
 		for thread in threads:
 			thread.join()
 
+		context.progress("Connecting to host via SSH")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			print host_string
+			context.progress("Merging chunks to a single file")
 			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
+			context.progress("Removing chunks")
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
+
+		context.progress("Transfer complete")
 
 	def string_description(self):
 		if self.transferred:

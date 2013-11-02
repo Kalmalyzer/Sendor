@@ -1,4 +1,5 @@
 
+import logging
 import multiprocessing
 import multiprocessing.queues
 import os
@@ -11,6 +12,7 @@ import Queue
 
 from SendorJob import SendorTask, SendorAction, SendorActionContext
 
+logger = logging.getLogger('SendorWorker')
 
 class SendorWorkerTaskArgs(object):
 	def __init__(self, task_id, work_directory, actions):
@@ -23,23 +25,32 @@ class QueueItem(object):
 		self.task_id = task_id
 		self.item_type = item_type
 
-class StdOutQueueItem(QueueItem):
-	def __init__(self, task_id, message):
-		super(StdOutQueueItem, self).__init__(task_id, 'stdout')
-		self.message = message
-
 class StatusQueueItem(QueueItem):
 	def __init__(self, task_id, status):
 		super(StatusQueueItem, self).__init__(task_id, 'status')
 		self.status = status
+
+class ProgressQueueItem(QueueItem):
+	def __init__(self, task_id, message):
+		super(ProgressQueueItem, self).__init__(task_id, 'progress')
+		self.message = message
+
+class StdOutQueueItem(QueueItem):
+	def __init__(self, task_id, message):
+		super(StdOutQueueItem, self).__init__(task_id, 'stdout')
+		self.message = message
 
 class TaskDoneQueueItem(QueueItem):
 	def __init__(self, task_id):
 		super(TaskDoneQueueItem, self).__init__(task_id, 'task_done')
 
 class SendorWorkerActionContext(SendorActionContext):
-	def __init__(self, work_directory):
+	def __init__(self, worker_task, work_directory):
 		super(SendorWorkerActionContext, self).__init__(work_directory)
+		self.worker_task = worker_task
+		
+	def progress(self, message):
+		self.worker_task.enqueue_progress(message)
 
 class SendorWorkerTask(object):
 	def __init__(self, queue, args):
@@ -52,13 +63,16 @@ class SendorWorkerTask(object):
 	def enqueue_stdout(self, message):
 		self.queue.put(StdOutQueueItem(self.args.task_id, message))
 
+	def enqueue_progress(self, message):
+		self.queue.put(ProgressQueueItem(self.args.task_id, message))
+
 	def enqueue_task_done(self):
 		self.queue.put(TaskDoneQueueItem(self.args.task_id))
 	
 	def run(self):
 		try:
 			self.enqueue_status('started')
-			context = SendorWorkerActionContext(self.args.work_directory)
+			context = SendorWorkerActionContext(self, self.args.work_directory)
 			for action in self.args.actions:
 				action.run(context)
 			self.enqueue_status('completed')
@@ -87,9 +101,9 @@ class SendorWorker(object):
 	def sendor_processing_thread(self):
 	
 		while True:
-			print "before get"
+			logger.debug("waiting for any jobs to be enqueued")
 			job = self.pending_jobs.get()
-			print "after get"
+			logger.debug("processing job")
 			self.current_job_is_canceled = False
 			self.current_job = job
 
@@ -128,7 +142,7 @@ class SendorWorker(object):
 			task = tasks[task_id]
 			
 			if item.item_type == 'status':
-				print "Status: " + str(item.status)
+				logger.debug("Status: " + item.status)
 				if item.status == 'started':
 					task.started()
 				elif item.status == 'completed':
@@ -138,24 +152,31 @@ class SendorWorker(object):
 				else:
 					raise Error("Unknown status: " + item.status)
 					
+			elif item.item_type == 'progress':
+				logger.debug("Progress: " + item.message)
+				task.set_progress(item.message)
+				task.append_details("Progress: " + item.message)
+
 			elif item.item_type == 'stdout':
-				print "Message: " + item.message
+				logger.debug("Message: " + item.message)
 				task.append_details(item.message)
 
 			elif item.item_type == 'task_done':
 				tasks_left -= 1
-				print "tasks_left: " + str(tasks_left)
+				logger.debug("tasks_left: " + str(tasks_left))
 			else:
-				raise Error("Unknown type: " + item.item_type)
+				raise Exception("Unknown type: " + item.item_type)
 
-		print "waiting for all pools to complete"
+		logger.debug("waiting for all pools to complete")
 		pool.close()
 		pool.join()
-	
+		logger.debug("all pools completed")
 
 class DummySendorAction(SendorAction):
 	def run(self, context):
-		print "Executing dummy sendor action"
+		context.progress("Dummy action initiated")
+		logger.info("Executing dummy sendor action")
+		context.progress("Dummy action completed")
 			
 class SendorTaskProcessUnitTest(unittest.TestCase):
 
@@ -179,4 +200,5 @@ class SendorTaskProcessUnitTest(unittest.TestCase):
 		pass
 	
 if __name__ == '__main__':
+	logging.basicConfig(level=logging.DEBUG)
 	unittest.main()
