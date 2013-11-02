@@ -59,9 +59,6 @@ class CopyFileAction(FabricAction):
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.progress("Copy completed")
 
-	def string_description(self):
-		return "Copy file " + self.source + " to " + self.target
-
 class ScpSendFileAction(FabricAction):
 
 	def __init__(self, source, filename, target):
@@ -78,9 +75,6 @@ class ScpSendFileAction(FabricAction):
 		key_file = self.target['private_key_file']
 		self.fabric_local('scp ' + ' -B -P ' + target_port + ' -i ' + key_file + ' ' + source_path + ' ' + target_path)
 		context.progress("Transfer completed")
-
-	def string_description(self):
-		return "Distribute to " + self.target['user']
 
 class SftpSendFileAction(FabricAction):
 
@@ -108,13 +102,6 @@ class SftpSendFileAction(FabricAction):
 		sftp = paramiko.SFTPClient.from_transport(transport)
 		sftp.put(source_path, self.filename, callback=cb)
 		context.progress("Transfer complete")
-
-	def string_description(self):
-		if self.transferred:
-			ratio = int(100 * self.transferred / self.total)
-			return "Distribute to " + self.target['user'] + " - " + str(ratio) + "% sent"
-		else:
-			return "Distribute to " + self.target['user']
 
 class ParallelScpSendFileAction(FabricAction):
 
@@ -168,13 +155,6 @@ class ParallelScpSendFileAction(FabricAction):
 
 		context.progress("Transfer complete")
 
-	def string_description(self):
-		if self.transferred:
-			ratio = int(100 * self.transferred / self.total)
-			return "Distribute to " + self.target['user'] + " - " + str(ratio) + "% sent"
-		else:
-			return "Distribute to " + self.target['user']
-
 class ParallelSftpSendFileAction(FabricAction):
 
 	def __init__(self, source, filename, target):
@@ -226,13 +206,6 @@ class ParallelSftpSendFileAction(FabricAction):
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
 
 		context.progress("Transfer complete")
-
-	def string_description(self):
-		if self.transferred:
-			ratio = int(100 * self.transferred / self.total)
-			return "Distribute to " + self.target['user'] + " - " + str(ratio) + "% sent"
-		else:
-			return "Distribute to " + self.target['user']
 
 class CopyFileActionUnitTest(unittest.TestCase):
 
