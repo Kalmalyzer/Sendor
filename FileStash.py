@@ -117,7 +117,7 @@ class FileStash(object):
 			self.physical_files = {}
 			self.stashed_files = {}
 			for file in old_index.values():
-				self.add_to_index(file['original_filename'], file['sha1sum'], dateutil.parser.parse(file['timestamp']), file['size'])
+				self.add_to_index(file['original_filename'], file['sha1sum'], dateutil.parser.parse(file['timestamp']), int(file['size']))
 				
 			
 		self.save_index()
