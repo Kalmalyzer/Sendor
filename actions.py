@@ -207,6 +207,11 @@ class ParallelSftpSendFileAction(FabricAction):
 
 		context.progress("Transfer complete")
 
+class SendorActionTestContext(SendorActionContext):
+
+	def progress(self, message):
+		logging.info("Progress: " + message)
+
 class CopyFileActionUnitTest(unittest.TestCase):
 
 	def setUp(self):
@@ -216,7 +221,7 @@ class CopyFileActionUnitTest(unittest.TestCase):
 	def test_copy_file_action(self):
 		self.assertFalse(os.path.exists('unittest/target'))
 		action = CopyFileAction('unittest/source', 'unittest/target')
-		action.run(SendorActionContext('unittest'))
+		action.run(SendorActionTestContext('unittest'))
 		self.assertTrue(os.path.exists('unittest/target'))
 
 	def tearDown(self):
@@ -243,7 +248,7 @@ class SftpSendFileActionUnitTest(unittest.TestCase):
 		target = targets['ssh_localhost_target2']
 
 		action = SftpSendFileAction(self.source_path, self.file_name, target)
-		action.run(SendorActionContext('unittest'))
+		action.run(SendorActionTestContext('unittest'))
 
 	def tearDown(self):
 		shutil.rmtree(self.root_path)
@@ -271,11 +276,12 @@ class ParallelSftpSendFileActionUnitTest(unittest.TestCase):
 		target = targets['ssh_localhost_target3']
 
 		action = ParallelSftpSendFileAction(self.source_path, self.file_name, target)
-		action.run(SendorActionContext(self.temp_path))
+		action.run(SendorActionTestContext(self.temp_path))
 
 	def tearDown(self):
 		shutil.rmtree(self.root_path)
 
 if __name__ == '__main__':
+	logging.basicConfig(level=logging.ERROR)
 	unittest.main()
 	fabric.network.disconnect_all()
