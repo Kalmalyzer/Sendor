@@ -22,6 +22,7 @@
 		"port" : "22",
 		"private_key_file" : "/home/vagrant/ssh_localhost_target3.private_key",
 		"distribution_method" : "parallel_sftp",
-		"max_parallel_transfers" : "5"
+		"max_parallel_transfers" : "5",
+		"chunk_size" : "8"
 	}
 }

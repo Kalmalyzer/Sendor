@@ -1,11 +1,13 @@
 
 import logging
 import json
+import multiprocessing.pool
 import os
 import shutil
 import threading
 import time
 import unittest
+import weakref
 
 import paramiko
 import fabric.api
@@ -15,6 +17,7 @@ import fabric.network
 from SendorJob import SendorTask, SendorAction, SendorActionContext
 from FileStash import StashedFile, PhysicalFile
 
+threadlocal = threading.local()
 
 class FabricAction(SendorAction):
 
@@ -167,6 +170,9 @@ class ParallelScpSendFileAction(FabricAction):
 
 class ParallelSftpSendFileAction(FabricAction):
 
+	min_chunks = 1
+	max_chunks = 99
+
 	def __init__(self, source, target):
 		super(ParallelSftpSendFileAction, self).__init__()
 		self.source = source
@@ -176,35 +182,54 @@ class ParallelSftpSendFileAction(FabricAction):
 	def run(self, context):
 
 		source = context.translate_path(self.source.full_path_filename)
-		num_parallel_transfers = int(self.target['max_parallel_transfers'])
+		max_parallel_transfers = int(self.target['max_parallel_transfers'])
+		num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.source.size / int(self.target['chunk_size']))))
 		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 		
 		context.progress("Splitting original file into chunks")
-		self.fabric_local('split -d -n ' + str(num_parallel_transfers) + ' ' + source + ' ' + temp_file_prefix)
+		self.fabric_local('split -d -n ' + str(num_chunks) + ' ' + source + ' ' + temp_file_prefix)
 		
 		context.progress("Transferring chunks using SFTP")
-		def transfer_file_thread(tempfile, targetfile, target):
+
+		progress_lock = threading.Lock()
+		
+		context.completed_chunks = 0
+		context.total_chunks = num_chunks
+		
+		def transfer_file_thread_initializer(target):
 			key_file = target['private_key_file']
 			key = paramiko.RSAKey.from_private_key_file(key_file)
 			transport = paramiko.Transport((target['host'], int(target['port'])))
 			transport.connect(username = target['user'], pkey = key)
-			sftp = paramiko.SFTPClient.from_transport(transport)
-			sftp.put(tempfile, targetfile, callback=None)
-				
-		threads = []
+			threadlocal.sftp = paramiko.SFTPClient.from_transport(transport)
+		
+		def transfer_file_thread(context, tempfile, targetfile, target):
+			threadlocal.sftp.put(tempfile, targetfile, callback=None)
+			with progress_lock:
+				context.completed_chunks += 1
+				ratio = int(100 * context.completed_chunks / context.total_chunks)
+				context.progress("Transferring chunks using SFTP - " + str(ratio) + "% done")
+
+		# Bugfix for http://bugs.python.org/issue10015
+		if not hasattr(threading.current_thread(), "_children"):
+			threading.current_thread()._children = weakref.WeakKeyDictionary()
+
+		thread_pool = multiprocessing.pool.ThreadPool(max_parallel_transfers, transfer_file_thread_initializer, (self.target, ))
 			
-		for i in range(num_parallel_transfers):
+		results = []
+		for i in range(num_chunks):
 			temp_filename_suffix = u'%02d' % i
 			tempfile = temp_file_prefix + temp_filename_suffix
 			targetfile = temp_filename_prefix + temp_filename_suffix
-			thread = threading.Thread(target=transfer_file_thread, args=(tempfile, targetfile, self.target))
-			thread.start()
-			threads.append(thread)
+			results.append(thread_pool.apply_async(transfer_file_thread, (context, tempfile, targetfile, self.target)))
 
-		for thread in threads:
-			thread.join()
+		thread_pool.close()
+
+		# Wait for all chunks to complete transfer, and re-raise any exceptions thrown inside those worker threads
+		for result in results:
+			result.get()
 
 		context.progress("Connecting to host via SSH")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
