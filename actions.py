@@ -15,7 +15,6 @@ from fabric.api import local, run, settings
 import fabric.network
 
 from SendorJob import SendorTask, SendorAction, SendorActionContext
-from FileStash import StashedFile, PhysicalFile
 
 threadlocal = threading.local()
 
@@ -52,29 +51,30 @@ class FabricAction(SendorAction):
 
 class CopyFileAction(FabricAction):
 
-	def __init__(self, source, target):
+	def __init__(self, source, sha1sum, size, target):
 		super(CopyFileAction, self).__init__()
 		self.source = source
 		self.target = target
 
 	def run(self, context):
 		context.progress("Copying file")
-		source = context.translate_path(self.source.full_path_filename)
+		source = context.translate_path(self.source)
 		target = context.translate_path(self.target)
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.progress("Copy completed")
 
 class ScpSendFileAction(FabricAction):
 
-	def __init__(self, source, target):
+	def __init__(self, source, filename, sha1sum, size, target):
 		super(ScpSendFileAction, self).__init__()
 		self.source = source
+		self.filename = filename
 		self.target = target
 
 	def run(self, context):
 		context.progress("Transferring file using SCP")
-		source_path = context.translate_path(self.source.full_path_filename)
-		target_path = self.target['user'] + '@' + self.target['host'] + ":" + self.source.original_filename
+		source_path = context.translate_path(self.source)
+		target_path = self.target['user'] + '@' + self.target['host'] + ":" + self.filename
 		target_port = self.target['port']
 		key_file = self.target['private_key_file']
 		self.fabric_local('scp ' + ' -B -P ' + target_port + ' -i ' + key_file + ' ' + source_path + ' ' + target_path)
@@ -82,9 +82,11 @@ class ScpSendFileAction(FabricAction):
 
 class SftpSendFileAction(FabricAction):
 
-	def __init__(self, source, target):
+	def __init__(self, source, filename, sha1sum, size, target):
 		super(SftpSendFileAction, self).__init__()
 		self.source = source
+		self.filename = filename
+		self.sha1sum = sha1sum
 		self.target = target
 		self.transferred = None
 
@@ -95,7 +97,7 @@ class SftpSendFileAction(FabricAction):
 			self.total = total
 
 		context.progress("Connecting to SSH server")
-		source_path = context.translate_path(self.source.full_path_filename)
+		source_path = context.translate_path(self.source)
 
 		key_file = self.target['private_key_file']
 		key = paramiko.RSAKey.from_private_key_file(key_file)
@@ -103,15 +105,15 @@ class SftpSendFileAction(FabricAction):
 		transport.connect(username = self.target['user'], pkey = key)
 		context.progress("Transferring file via SFTP")
 		sftp = paramiko.SFTPClient.from_transport(transport)
-		sftp.put(source_path, self.source.original_filename, callback=cb)
+		sftp.put(source_path, self.filename, callback=cb)
 
 		context.progress("Connecting to SSH server again")
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
 			context.progress("Validating file integrity")
-			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.source.original_filename)[:40]
-			if target_sha1sum != self.source.physical_file.sha1sum:
-				self.fabric_remote('rm ' + self.source.original_filename)
+			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+			if target_sha1sum != self.sha1sum:
+				self.fabric_remote('rm ' + self.filename)
 				context.progress("File corrupted during transfer; removed from target location")
 				raise Exception("File corrupted during transfer")
 
@@ -119,15 +121,16 @@ class SftpSendFileAction(FabricAction):
 
 class ParallelScpSendFileAction(FabricAction):
 
-	def __init__(self, source, target):
+	def __init__(self, source, filename, sha1sum, size, target):
 		super(ParallelScpSendFileAction, self).__init__()
 		self.source = source
+		self.filename = filename
 		self.target = target
 		self.transferred = None
 
 	def run(self, context):
 
-		source = context.translate_path(self.source.full_path_filename)
+		source = context.translate_path(self.source)
 		num_parallel_transfers = int(self.target['max_parallel_transfers'])
 		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
@@ -162,7 +165,7 @@ class ParallelScpSendFileAction(FabricAction):
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
 			context.progress("Merging chunks to a single file")
-			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.source.original_filename)
+			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
 			context.progress("Removing chunks")
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
 
@@ -173,17 +176,20 @@ class ParallelSftpSendFileAction(FabricAction):
 	min_chunks = 1
 	max_chunks = 99
 
-	def __init__(self, source, target):
+	def __init__(self, source, filename, sha1sum, size, target):
 		super(ParallelSftpSendFileAction, self).__init__()
 		self.source = source
+		self.filename = filename
+		self.sha1sum = sha1sum
+		self.size = size
 		self.target = target
 		self.transferred = None
 
 	def run(self, context):
 
-		source = context.translate_path(self.source.full_path_filename)
+		source = context.translate_path(self.source)
 		max_parallel_transfers = int(self.target['max_parallel_transfers'])
-		num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.source.size / int(self.target['chunk_size']))))
+		num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.size / int(self.target['chunk_size']))))
 		temp_directory = context.work_directory
 		temp_filename_prefix = 'chunk_'
 		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
@@ -235,13 +241,13 @@ class ParallelSftpSendFileAction(FabricAction):
 		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
 			context.progress("Merging chunks to a single file")
-			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.source.original_filename)
+			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
 			context.progress("Removing chunks")
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
 			context.progress("Validating file integrity")
-			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.source.original_filename)[:40]
-			if target_sha1sum != self.source.physical_file.sha1sum:
-				self.fabric_remote('rm ' + self.source.original_filename)
+			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+			if target_sha1sum != self.sha1sum:
+				self.fabric_remote('rm ' + self.filename)
 				context.progress("File corrupted during transfer; removed from target location")
 				raise Exception("File corrupted during transfer")
 
@@ -254,50 +260,33 @@ class SendorActionTestContext(SendorActionContext):
 
 class CopyFileActionUnitTest(unittest.TestCase):
 
-	root_path = 'unittest'
-	temp_path = root_path
-	upload_root = root_path + '/upload'
-	source_file_name = 'source'
-	source_file_contents = 'abc123'
-	source_file_sha1sum = '61ee8b5601a84d5154387578466c8998848ba089'
-	source_file_timestamp = '0'
-	source_file_size = 6
-	physical_file = PhysicalFile(source_file_sha1sum)
-	source_file = StashedFile(None, upload_root, source_file_name, physical_file, source_file_timestamp, source_file_size)
-
-	target_file_fullpath = root_path + '/target'
-
 	def setUp(self):
-		os.mkdir(self.root_path)
-		os.mkdir(self.upload_root)
-		local('echo ' + self.source_file_contents + ' > ' + self.upload_root + '/' + self.source_file_sha1sum)
+		os.mkdir('unittest')
+		local('echo abc123 > unittest/source')
 
 	def test_copy_file_action(self):
-		self.assertFalse(os.path.exists(self.target_file_fullpath))
-		action = CopyFileAction(self.source_file, self.target_file_fullpath)
-		action.run(SendorActionTestContext(self.temp_path))
-		self.assertTrue(os.path.exists(self.target_file_fullpath))
+		self.assertFalse(os.path.exists('unittest/target'))
+		action = CopyFileAction('unittest/source', None, None, 'unittest/target')
+		action.run(SendorActionTestContext('unittest'))
+		self.assertTrue(os.path.exists('unittest/target'))
 
 	def tearDown(self):
-		shutil.rmtree(self.root_path)
+		shutil.rmtree('unittest')
 
 class SftpSendFileActionUnitTest(unittest.TestCase):
 
 	root_path = 'unittest'
-	temp_path = root_path
 	upload_root = root_path + '/upload'
-	source_file_name = 'testfile'
-	source_file_contents = 'abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890'
-	source_file_sha1sum = '67b3642bc208372ead45399884da28c360fc6d36'
-	source_file_timestamp = '0'
-	source_file_size = 108
-	physical_file = PhysicalFile(source_file_sha1sum)
-	source_file = StashedFile(None, upload_root, source_file_name, physical_file, source_file_timestamp, source_file_size)
+	file_name = 'testfile'
+	source_path = upload_root + '/' + file_name
+	file_contents = 'abc123'
+	sha1sum = '61ee8b5601a84d5154387578466c8998848ba089'
+	size = len(file_contents)
 
 	def setUp(self):
 		os.mkdir(self.root_path)
 		os.mkdir(self.upload_root)
-		local('echo ' + self.source_file_contents + ' > ' + self.upload_root + '/' + self.source_file_sha1sum)
+		local('echo ' + self.file_contents + ' > ' + self.upload_root + '/' + self.file_name)
 
 	def test_sftp_send_file_action(self):
 
@@ -307,8 +296,8 @@ class SftpSendFileActionUnitTest(unittest.TestCase):
 
 		target = targets['ssh_localhost_target2']
 
-		action = SftpSendFileAction(self.source_file, target)
-		action.run(SendorActionTestContext(self.temp_path))
+		action = SftpSendFileAction(self.source_path, self.file_name, self.sha1sum, self.size, target)
+		action.run(SendorActionTestContext('unittest'))
 
 	def tearDown(self):
 		shutil.rmtree(self.root_path)
@@ -316,21 +305,19 @@ class SftpSendFileActionUnitTest(unittest.TestCase):
 class ParallelSftpSendFileActionUnitTest(unittest.TestCase):
 
 	root_path = 'unittest'
-	temp_path = root_path + '/temp'
 	upload_root = root_path + '/upload'
-	source_file_name = 'testfile'
-	source_file_contents = 'abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890'
-	source_file_sha1sum = '67b3642bc208372ead45399884da28c360fc6d36'
-	source_file_timestamp = '0'
-	source_file_size = 108
-	physical_file = PhysicalFile(source_file_sha1sum)
-	source_file = StashedFile(None, upload_root, source_file_name, physical_file, source_file_timestamp, source_file_size)
-
+	temp_path = root_path + '/temp'
+	file_name = 'testfile'
+	source_path = upload_root + '/' + file_name
+	file_contents = 'abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890'
+	sha1sum = '67b3642bc208372ead45399884da28c360fc6d36'
+	size = len(file_contents)
+	
 	def setUp(self):
 		os.mkdir(self.root_path)
 		os.mkdir(self.upload_root)
 		os.mkdir(self.temp_path)
-		local('echo ' + self.source_file_contents + ' > ' + self.upload_root + '/' + self.source_file_sha1sum)
+		local('echo ' + self.file_contents + ' > ' + self.upload_root + '/' + self.file_name)
 
 	def test_parallel_sftp_send_file_action(self):
 
@@ -340,7 +327,7 @@ class ParallelSftpSendFileActionUnitTest(unittest.TestCase):
 
 		target = targets['ssh_localhost_target3']
 
-		action = ParallelSftpSendFileAction(self.source_file, target)
+		action = ParallelSftpSendFileAction(self.source_path, self.file_name, self.sha1sum, self.size, target)
 		action.run(SendorActionTestContext(self.temp_path))
 
 	def tearDown(self):
