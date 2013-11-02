@@ -101,6 +101,17 @@ class SftpSendFileAction(FabricAction):
 		context.progress("Transferring file via SFTP")
 		sftp = paramiko.SFTPClient.from_transport(transport)
 		sftp.put(source_path, self.source.original_filename, callback=cb)
+
+		context.progress("Connecting to SSH server again")
+		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
+		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
+			context.progress("Validating file integrity")
+			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.source.original_filename)[:40]
+			if target_sha1sum != self.source.physical_file.sha1sum:
+				self.fabric_remote('rm ' + self.source.original_filename)
+				context.progress("File corrupted during transfer; removed from target location")
+				raise Exception("File corrupted during transfer")
+
 		context.progress("Transfer complete")
 
 class ParallelScpSendFileAction(FabricAction):
@@ -202,6 +213,12 @@ class ParallelSftpSendFileAction(FabricAction):
 			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.source.original_filename)
 			context.progress("Removing chunks")
 			self.fabric_remote('rm ' + temp_filename_prefix + '??')
+			context.progress("Validating file integrity")
+			target_sha1sum = self.fabric_remote('sha1sum -b ' + self.source.original_filename)[:40]
+			if target_sha1sum != self.source.physical_file.sha1sum:
+				self.fabric_remote('rm ' + self.source.original_filename)
+				context.progress("File corrupted during transfer; removed from target location")
+				raise Exception("File corrupted during transfer")
 
 		context.progress("Transfer complete")
 
