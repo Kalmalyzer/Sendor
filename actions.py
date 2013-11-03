@@ -63,23 +63,6 @@ class CopyFileAction(FabricAction):
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.progress("Copy completed")
 
-class ScpSendFileAction(FabricAction):
-
-	def __init__(self, source, filename, sha1sum, size, target):
-		super(ScpSendFileAction, self).__init__()
-		self.source = source
-		self.filename = filename
-		self.target = target
-
-	def run(self, context):
-		context.progress("Transferring file using SCP")
-		source_path = context.translate_path(self.source)
-		target_path = self.target['user'] + '@' + self.target['host'] + ":" + self.filename
-		target_port = self.target['port']
-		key_file = self.target['private_key_file']
-		self.fabric_local('scp ' + ' -B -P ' + target_port + ' -i ' + key_file + ' ' + source_path + ' ' + target_path)
-		context.progress("Transfer completed")
-
 class SftpSendFileAction(FabricAction):
 
 	def __init__(self, source, filename, sha1sum, size, target):
@@ -126,58 +109,6 @@ class SftpSendFileAction(FabricAction):
 					self.fabric_remote('rm ' + self.filename)
 					context.progress("File corrupted during transfer; removed from target location")
 					raise Exception("File corrupted during transfer")
-
-		context.progress("Transfer complete")
-
-class ParallelScpSendFileAction(FabricAction):
-
-	def __init__(self, source, filename, sha1sum, size, target):
-		super(ParallelScpSendFileAction, self).__init__()
-		self.source = source
-		self.filename = filename
-		self.target = target
-		self.transferred = None
-
-	def run(self, context):
-
-		source = context.translate_path(self.source)
-		num_parallel_transfers = int(self.target['max_parallel_transfers'])
-		temp_directory = context.work_directory
-		temp_filename_prefix = 'chunk_'
-		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
-
-		context.progress("Splitting original file into chunks")
-		self.fabric_local('split -d -n ' + str(num_parallel_transfers) + ' ' + source + ' ' + temp_file_prefix)
-
-		context.progress("Transferring chunks using SCP")
-		
-		def transfer_file_thread(self, tempfile, targetfile, target):
-			source_path = tempfile
-			target_path = self.target['user'] + '@' + self.target['host'] + ":" + targetfile
-			target_port = self.target['port']
-			key_file = self.target['private_key_file']
-			self.fabric_local('scp ' + ' -B -P ' + target_port + ' -i ' + key_file + ' ' + source_path + ' ' + target_path)
-				
-		threads = []
-			
-		for i in range(num_parallel_transfers):
-			temp_filename_suffix = u'%02d' % i
-			tempfile = temp_file_prefix + temp_filename_suffix
-			targetfile = temp_filename_prefix + temp_filename_suffix
-			thread = threading.Thread(target=transfer_file_thread, args=(self, tempfile, targetfile, self.target))
-			thread.start()
-			threads.append(thread)
-
-		for thread in threads:
-			thread.join()
-
-		context.progress("Connecting to host via SSH")
-		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
-		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			context.progress("Merging chunks to a single file")
-			self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
-			context.progress("Removing chunks")
-			self.fabric_remote('rm ' + temp_filename_prefix + '??')
 
 		context.progress("Transfer complete")
 

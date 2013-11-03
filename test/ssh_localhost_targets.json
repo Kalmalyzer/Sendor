@@ -1,11 +1,11 @@
 {
 	"ssh_localhost_target1" : {
-		"name" : "SSH localhost target 1 (SCP)",
+		"name" : "SSH localhost target 1 (SFTP)",
 		"user" : "ssh_localhost_target1",
 		"host" : "localhost",
 		"port" : "22",
 		"private_key_file" : "/home/vagrant/ssh_localhost_target1.private_key",
-		"distribution_method" : "scp"
+		"distribution_method" : "sftp"
 	},
 	"ssh_localhost_target2" : {
 		"name" : "SSH localhost target 2 (SFTP)",
