@@ -53,8 +53,9 @@ class SendorWorkerActionContext(SendorActionContext):
 		self.worker_task.enqueue_progress(message)
 
 class SendorWorkerTask(object):
-	def __init__(self, queue, args):
+	def __init__(self, queue, cancel, args):
 		self.queue = queue
+		self.cancel = cancel
 		self.args = args
 
 	def enqueue_status(self, status):
@@ -71,11 +72,14 @@ class SendorWorkerTask(object):
 	
 	def run(self):
 		try:
-			self.enqueue_status('started')
-			context = SendorWorkerActionContext(self, self.args.work_directory)
-			for action in self.args.actions:
-				action.run(context)
-			self.enqueue_status('completed')
+			if self.cancel.is_set():
+				self.enqueue_status('canceled')
+			else:
+				self.enqueue_status('started')
+				context = SendorWorkerActionContext(self, self.args.work_directory)
+				for action in self.args.actions:
+					action.run(context)
+				self.enqueue_status('completed')
 		except:
 			self.enqueue_status('failed')
 			self.enqueue_stdout(traceback.format_exc())
@@ -83,11 +87,12 @@ class SendorWorkerTask(object):
 			self.enqueue_task_done()
 
 def start_sendor_worker_task(args):
-	processor = SendorWorkerTask(start_sendor_worker_task.queue, args)
+	processor = SendorWorkerTask(start_sendor_worker_task.queue, start_sendor_worker_task.cancel, args)
 	processor.run()
 
-def initialize_sendor_worker_process(queue):
+def initialize_sendor_worker_process(queue, cancel):
 	start_sendor_worker_task.queue = queue
+	start_sendor_worker_task.cancel = cancel
 	
 class SendorWorker(object):
 
@@ -97,6 +102,7 @@ class SendorWorker(object):
 		self.past_jobs = past_jobs
 		thread.start_new_thread((lambda sendor_worker: sendor_worker.sendor_processing_thread()), (self,))
 		self.current_job = None
+		self.cancel = multiprocessing.Event()
 
 	def sendor_processing_thread(self):
 	
@@ -107,24 +113,32 @@ class SendorWorker(object):
 			self.current_job_is_canceled = False
 			self.current_job = job
 
-			os.mkdir(job.work_directory)
-			for task in job.tasks:
-				os.mkdir(task.work_directory)
-
-			job.started()
-			self.run(job.tasks)
-			job.completed()
-				
-			shutil.rmtree(job.work_directory)
+			self.run_job(job)
 
 			self.current_job = None
 			self.pending_jobs.task_done()
 			self.past_jobs.put(job)
 
-	def run(self, tasks):
+	def cancel_current_job(self):
+		self.cancel.set()
+
+	def run_job(self, job):
+			
+		os.mkdir(job.work_directory)
+		for task in job.tasks:
+			os.mkdir(task.work_directory)
+
+		job.started()
+		self.run_tasks(job.tasks)
+		job.completed()
+			
+		shutil.rmtree(job.work_directory)
+		
+	def run_tasks(self, tasks):
 	
+		self.cancel.clear()
 		queue = multiprocessing.queues.SimpleQueue()
-		pool = multiprocessing.Pool(processes=self.num_processes, initializer=initialize_sendor_worker_process, initargs=(queue,))
+		pool = multiprocessing.Pool(processes=self.num_processes, initializer=initialize_sendor_worker_process, initargs=(queue, self.cancel))
 
 		tasks_args = []
 
@@ -149,6 +163,8 @@ class SendorWorker(object):
 					task.completed()
 				elif item.status == 'failed':
 					task.failed()
+				elif item.status == 'canceled':
+					task.canceled()
 				else:
 					raise Error("Unknown status: " + item.status)
 					

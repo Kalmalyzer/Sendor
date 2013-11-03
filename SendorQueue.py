@@ -22,7 +22,6 @@ class SendorQueue():
 		self.job_work_directory = os.path.join(self.work_directory, 'current_job')
 		shutil.rmtree(self.job_work_directory, ignore_errors=True)
 		self.pending_jobs = Queue()
-		self.current_job = None
 		self.past_jobs = Queue()
 		self.worker = SendorWorker(num_processes, self.pending_jobs, self.past_jobs)
 
@@ -44,7 +43,7 @@ class SendorQueue():
 		self.pending_jobs.join()
 
 	def cancel_current_job(self):
-		raise Exception("Not implemented")
+		self.worker.cancel_current_job()
 		
 
 class SendorQueueUnitTest(unittest.TestCase):
