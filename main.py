@@ -34,6 +34,7 @@ class SendorDistributionJob(SendorJob):
 		self.stashed_file = stashed_file
 
 	def completed(self):
+		super(SendorDistributionJob, self).completed()
 		g_file_stash.unlock(self.stashed_file)
 
 		
