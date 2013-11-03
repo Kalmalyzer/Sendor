@@ -1,5 +1,28 @@
 
+import datetime
+
 from abc import ABCMeta, abstractmethod
+
+def format_datetime(time):
+	return time.strftime("%Y-%m-%d %H:%M:%S")
+	
+
+def format_timedelta(duration):
+	total_seconds = int(duration.total_seconds())
+	seconds = total_seconds % 60
+	days = total_seconds // (3600 * 24)
+	hours = (total_seconds // 3600) % 24
+	minutes = (total_seconds // 60) % 60
+	
+	result = str(seconds) + " seconds"
+	if minutes > 0:
+		result = str(minutes) + " minutes, " + result
+	if hours > 0:
+		result = str(hours) + " hours, " + result
+	if days > 0:
+		result = str(days) + " days, " + result
+		
+	return result
 
 
 class SendorJob(object):
@@ -7,31 +30,53 @@ class SendorJob(object):
 	def __init__(self, tasks=None):
 		self.job_id = None
 		self.work_directory = None
+		self.enqueue_time = None
+		self.start_time = None
+		self.end_time = None
 		if tasks:
 			self.tasks = tasks
 		else:
 			self.tasks = []
 
 	def started(self):
-		pass
+		self.start_time = datetime.datetime.utcnow()
 
 	def completed(self):
-		pass
+		self.end_time = datetime.datetime.utcnow()
 
 	def progress(self):
-		status = []
+		status = { 'enqueue_time' : format_datetime(self.enqueue_time) }
+		
+		if self.start_time:
+			if self.end_time:
+				duration = self.end_time - self.start_time
+			else:
+				duration = datetime.datetime.utcnow() - self.start_time
+			status['duration'] = format_timedelta(duration)
 
+		tasks_status = []
 		for task in self.tasks[0:]:
-			status.append({ 'description' : task.string_description(),
+			task_status = { 'description' : task.string_description(),
 							'state' : task.string_state(),
 							'progress' : task.string_progress(),
-							'details' : task.string_details() })
+							'details' : task.string_details() }
+			if task.start_time:
+				if task.end_time:
+					duration = task.end_time - task.start_time
+				else:
+					duration = datetime.datetime.utcnow() - task.start_time
+				task_status['duration'] = format_timedelta(duration)
+			
+			tasks_status.append(task_status)
+
+		status['tasks'] = tasks_status
 			
 		return status
 
 	def set_queue_info(self, job_id, work_directory):
 		self.job_id = job_id
 		self.work_directory = work_directory
+		self.enqueue_time = datetime.datetime.utcnow()
 		
 class SendorTask(object):
 
@@ -48,6 +93,8 @@ class SendorTask(object):
 		self.actions = []
 		self.task_id = None
 		self.work_directory = None
+		self.start_time = None
+		self.end_time = None
 
 	def set_queue_info(self, task_id, work_directory):
 		self.task_id = task_id
@@ -55,15 +102,19 @@ class SendorTask(object):
 		
 	def started(self):
 		self.state = self.STARTED
+		self.start_time = datetime.datetime.utcnow()
 
 	def completed(self):
 		self.state = self.COMPLETED
+		self.end_time = datetime.datetime.utcnow()
 
 	def failed(self):
 		self.state = self.FAILED
+		self.end_time = datetime.datetime.utcnow()
 
 	def canceled(self):
 		self.state = self.CANCELED
+		self.end_time = datetime.datetime.utcnow()
 
 	def run(self, context):
 		for action in self.actions:
