@@ -27,10 +27,20 @@ class StatusQueueItem(QueueItem):
 		super(StatusQueueItem, self).__init__(task_id, 'status')
 		self.status = status
 
+class ActivityQueueItem(QueueItem):
+	def __init__(self, task_id, activity):
+		super(ActivityQueueItem, self).__init__(task_id, 'activity')
+		self.activity = activity
+
 class ProgressQueueItem(QueueItem):
-	def __init__(self, task_id, message):
+	def __init__(self, task_id, progress):
 		super(ProgressQueueItem, self).__init__(task_id, 'progress')
-		self.message = message
+		self.progress = progress
+
+class LogQueueItem(QueueItem):
+	def __init__(self, task_id, log):
+		super(LogQueueItem, self).__init__(task_id, 'log')
+		self.log = log
 
 class StdOutQueueItem(QueueItem):
 	def __init__(self, task_id, message):
@@ -46,8 +56,14 @@ class SendorWorkerActionContext(SendorActionContext):
 		super(SendorWorkerActionContext, self).__init__(work_directory)
 		self.worker_task = worker_task
 		
-	def progress(self, message):
-		self.worker_task.enqueue_progress(message)
+	def activity(self, activity):
+		self.worker_task.enqueue_activity(activity)
+
+	def progress(self, progress):
+		self.worker_task.enqueue_progress(progress)
+
+	def log(self, log):
+		self.worker_task.enqueue_log(log)
 
 class SendorWorkerTask(object):
 	def __init__(self, queue, cancel, args):
@@ -58,11 +74,17 @@ class SendorWorkerTask(object):
 	def enqueue_status(self, status):
 		self.queue.put(StatusQueueItem(self.args.task_id, status))
 
+	def enqueue_activity(self, activity):
+		self.queue.put(ActivityQueueItem(self.args.task_id, activity))
+
+	def enqueue_progress(self, progress):
+		self.queue.put(ProgressQueueItem(self.args.task_id, progress))
+
+	def enqueue_log(self, log):
+		self.queue.put(LogQueueItem(self.args.task_id, log))
+
 	def enqueue_stdout(self, message):
 		self.queue.put(StdOutQueueItem(self.args.task_id, message))
-
-	def enqueue_progress(self, message):
-		self.queue.put(ProgressQueueItem(self.args.task_id, message))
 
 	def enqueue_task_done(self):
 		self.queue.put(TaskDoneQueueItem(self.args.task_id))
@@ -147,14 +169,21 @@ class SendorWorker(object):
 				else:
 					raise Error("Unknown status: " + item.status)
 					
+			elif item.item_type == 'activity':
+				logger.debug("Activity: " + item.activity)
+				task.set_activity(item.activity)
+
 			elif item.item_type == 'progress':
-				logger.debug("Progress: " + item.message)
-				task.set_progress(item.message)
-				task.append_details("Progress: " + item.message)
+				logger.debug("Progress: " + str(int(item.progress * 100)) + "%")
+				task.set_progress(item.progress)
+
+			elif item.item_type == 'log':
+				logger.debug("Log: " + item.log)
+				task.append_log(item.log)
 
 			elif item.item_type == 'stdout':
-				logger.debug("Message: " + item.message)
-				task.append_details(item.message)
+				logger.debug("Stdout: " + item.message)
+				task.append_log(item.message)
 
 			elif item.item_type == 'task_done':
 				tasks_left -= 1
@@ -169,9 +198,11 @@ class SendorWorker(object):
 
 class DummySendorAction(SendorAction):
 	def run(self, context):
-		context.progress("Dummy action initiated")
+		context.activity("Dummy action initiated")
 		logger.info("Executing dummy sendor action")
-		context.progress("Dummy action completed")
+		context.progress(0.1)
+		context.progress(0.9)
+		context.activity("Dummy action completed")
 			
 class SendorTaskProcessUnitTest(unittest.TestCase):
 

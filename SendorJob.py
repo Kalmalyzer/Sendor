@@ -58,8 +58,9 @@ class SendorJob(object):
 		for task in self.tasks[0:]:
 			task_status = { 'description' : task.string_description(),
 							'state' : task.string_state(),
-							'progress' : task.string_progress(),
-							'details' : task.string_details() }
+							'activity' : task.get_activity(),
+							'progress' : task.get_progress(),
+							'log' : task.get_log() }
 			if task.start_time:
 				if task.end_time:
 					duration = task.end_time - task.start_time
@@ -88,13 +89,14 @@ class SendorTask(object):
 	
 	def __init__(self):
 		self.state = self.NOT_STARTED
-		self.progress = ""
-		self.details = ""
 		self.actions = []
 		self.task_id = None
 		self.work_directory = None
 		self.start_time = None
 		self.end_time = None
+		self.progress = 0
+		self.activity = ""
+		self.log = ""
 
 	def set_queue_info(self, task_id, work_directory):
 		self.task_id = task_id
@@ -137,17 +139,23 @@ class SendorTask(object):
 		else:
 			raise Exception("Unknown state " + str(self.state))
 
-	def string_details(self):
-		return self.details
+	def set_activity(self, activity):
+		self.activity = activity
 
-	def string_progress(self):
+	def get_activity(self):
+		return self.activity
+		
+	def set_progress(self, progress):
+		self.progress = progress
+
+	def get_progress(self):
 		return self.progress
 		
-	def set_progress(self, message):
-		self.progress = message
+	def append_log(self, log):
+		self.progress = log
 
-	def append_details(self, string):
-		self.details = self.details + string + "\n"
+	def get_log(self):
+		return self.log
 
 
 class SendorActionContext(object):
@@ -163,9 +171,17 @@ class SendorActionContext(object):
 			return path
 
 	@abstractmethod
-	def progress(self, message):
+	def activity(self, message):
 		return
-			
+
+	@abstractmethod
+	def progress(self, progress):
+		return
+
+	@abstractmethod
+	def log(self, log):
+		return
+
 class SendorAction(object):
 	__metaclass__ = ABCMeta
 	

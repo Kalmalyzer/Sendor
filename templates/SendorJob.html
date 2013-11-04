@@ -19,19 +19,20 @@
 		{% for task in tasks %}
 			{% set description = task['description'] %}
 			{% set state = task['state'] %}
-			{% set progress = task['progress'] %}
-			{% set details = task['details'] %}
+			{% set activity = task['activity'] %}
+			{% set progress = 100 * task['progress'] ~ "%" %}
+			{% set log = task['log'] %}
 			{% set task_duration = task['duration'] %}
 			<tr>
 				<td>
 					{% if task_duration %}
-						{{description}}: {{ task_duration }}: {{ progress }}
+						{{description}}: {{ task_duration }}: {{ activity }} - {{ progress }}
 					{% else %}
 						{{description}}
 					{% endif %}
 					<div>
-						{% if details != "" %}
-						<pre>{{details}}</pre>
+						{% if log != "" %}
+						<pre>{{log}}</pre>
 						{% endif %}
 					</div>
 				</td>
