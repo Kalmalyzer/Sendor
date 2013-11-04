@@ -63,6 +63,33 @@ class CopyFileAction(FabricAction):
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.activity("Copy completed")
 
+class TestIfFileUpToDateOnTargetAction(FabricAction):
+
+	def __init__(self, filename, sha1sum, target):
+		super(TestIfFileUpToDateOnTargetAction, self).__init__()
+		self.filename = filename
+		self.sha1sum = sha1sum
+		self.target = target
+
+	def run(self, context):
+
+		context.activity("Connecting to SSH server")
+		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
+		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
+			context.activity("Checking if remote file already is up-to-date")
+			try:
+				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
+			except:
+				target_sha1sum = None
+
+			if target_sha1sum == self.sha1sum:
+				context.activity("Remote file is up-to-date; skipping transfer")
+				context.progress(1.0)
+				context.file_up_to_date_on_target = True
+			else:
+				context.activity("Remote file is not up-to-date")
+				context.file_up_to_date_on_target = False
+
 class SftpSendFileAction(FabricAction):
 
 	def __init__(self, source, filename, sha1sum, size, target):
@@ -75,27 +102,17 @@ class SftpSendFileAction(FabricAction):
 
 	def run(self, context):
 
-		def cb(transferred, total):
-			self.transferred = transferred
-			self.total = total
-			ratio = self.transferred / self.total
-			context.progress(ratio)
+		if not (hasattr(context, 'file_up_to_date_on_target') and context.file_up_to_date_on_target):
+		
+			def cb(transferred, total):
+				self.transferred = transferred
+				self.total = total
+				ratio = self.transferred / self.total
+				context.progress(ratio)
 
-		context.activity("Connecting to SSH server")
-		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
-		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			context.activity("Checking if remote file already is up-to-date")
-			try:
-				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
-			except:
-				target_sha1sum = None
-				
-			if target_sha1sum == self.sha1sum:
-				context.activity("Remote file is up-to-date; skipping transfer")
-				context.progress(1.0)
-			else:
-
-				context.activity("Connecting to SSH server")
+			context.activity("Connecting to SSH server")
+			host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
+			with settings(host_string=host_string, key_filename=self.target['private_key_file']):
 				source_path = context.translate_path(self.source)
 
 				key_file = self.target['private_key_file']
@@ -113,7 +130,7 @@ class SftpSendFileAction(FabricAction):
 					context.activity("File corrupted during transfer; removed from target location")
 					raise Exception("File corrupted during transfer")
 
-		context.activity("Transfer complete")
+			context.activity("Transfer complete")
 
 class ParallelSftpSendFileAction(FabricAction):
 
@@ -131,27 +148,18 @@ class ParallelSftpSendFileAction(FabricAction):
 
 	def run(self, context):
 
-		source = context.translate_path(self.source)
-		max_parallel_transfers = int(self.target['max_parallel_transfers'])
-		num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.size / int(self.target['chunk_size']))))
-		temp_directory = context.work_directory
-		temp_filename_prefix = 'chunk_'
-		temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
+		if not (hasattr(context, 'file_up_to_date_on_target') and context.file_up_to_date_on_target):
+			source = context.translate_path(self.source)
+			max_parallel_transfers = int(self.target['max_parallel_transfers'])
+			num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.size / int(self.target['chunk_size']))))
+			temp_directory = context.work_directory
+			temp_filename_prefix = 'chunk_'
+			temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 
-		context.activity("Connecting to SSH server")
-		host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
-		with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			context.activity("Checking if remote file already is up-to-date")
-			try:
-				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
-			except:
-				target_sha1sum = None
-
-			if target_sha1sum == self.sha1sum:
-				context.activity("Remote file is up-to-date; skipping transfer")
-				context.progress(1.0)
-			else:
-		
+			context.activity("Connecting to SSH server")
+			host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
+			with settings(host_string=host_string, key_filename=self.target['private_key_file']):
+			
 				context.activity("Splitting original file into chunks")
 				self.fabric_local('split -d -n ' + str(num_chunks) + ' ' + source + ' ' + temp_file_prefix)
 				
@@ -206,7 +214,7 @@ class ParallelSftpSendFileAction(FabricAction):
 					context.activity("File corrupted during transfer; removed from target location")
 					raise Exception("File corrupted during transfer")
 
-		context.activity("Transfer complete")
+			context.activity("Transfer complete")
 
 class SendorActionTestContext(SendorActionContext):
 

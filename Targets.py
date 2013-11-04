@@ -4,6 +4,7 @@ import logging
 import os
 import unittest
 
+from actions import TestIfFileUpToDateOnTargetAction
 from SendorJob import SendorTask, SendorAction
 
 import target_distribution_methods
@@ -35,6 +36,7 @@ class Targets(object):
 
 		target = self.targets[id]
 		actions = [ LogDistributionAction("Started", filename, target),
+			TestIfFileUpToDateOnTargetAction(filename, sha1sum, target),
 			target_distribution_methods.create_action(source, filename, sha1sum, size, target),
 			LogDistributionAction("Completed", filename, target) ]
 
