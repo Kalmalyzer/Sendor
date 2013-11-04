@@ -59,8 +59,8 @@ def create_ui(upload_folder):
 			pending_jobs.append(job.progress())
 
 		current_job = None
-		if g_sendor_queue.worker.current_job:
-			current_job = g_sendor_queue.worker.current_job.progress()
+		if g_sendor_queue.worker_thread.current_job:
+			current_job = g_sendor_queue.worker_thread.current_job.progress()
 
 		past_jobs = []
 		for job in reversed(list(g_sendor_queue.past_jobs.queue)):

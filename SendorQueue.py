@@ -1,4 +1,5 @@
 
+import logging
 import os
 import shutil
 import thread
@@ -12,7 +13,36 @@ from flask import render_template
 from SendorWorker import SendorWorker
 from SendorJob import SendorJob, SendorTask
 
-class SendorQueue():
+logger = logging.getLogger('SendorQueue')
+
+class SendorWorkerThread(object):
+
+	def __init__(self, num_processes, pending_jobs, past_jobs):
+		self.pending_jobs = pending_jobs
+		self.past_jobs = past_jobs
+		thread.start_new_thread((lambda sendor_worker_thread: sendor_worker_thread.sendor_processing_thread()), (self,))
+		self.current_job = None
+		self.worker = SendorWorker(num_processes)
+
+	def sendor_processing_thread(self):
+	
+		while True:
+			logger.debug("waiting for any jobs to be enqueued")
+			job = self.pending_jobs.get()
+			logger.debug("processing job")
+			self.current_job_is_canceled = False
+			self.current_job = job
+
+			self.worker.run_job(job)
+
+			self.current_job = None
+			self.pending_jobs.task_done()
+			self.past_jobs.put(job)
+
+	def cancel_current_job(self):
+		self.worker.cancel_current_job()
+
+class SendorQueue(object):
 
 	unique_id = 0
 
@@ -23,7 +53,7 @@ class SendorQueue():
 		shutil.rmtree(self.job_work_directory, ignore_errors=True)
 		self.pending_jobs = Queue()
 		self.past_jobs = Queue()
-		self.worker = SendorWorker(num_processes, self.pending_jobs, self.past_jobs)
+		self.worker_thread = SendorWorkerThread(num_processes, self.pending_jobs, self.past_jobs)
 
 	def add(self, job):
 		job_id = self.unique_id
@@ -43,7 +73,7 @@ class SendorQueue():
 		self.pending_jobs.join()
 
 	def cancel_current_job(self):
-		self.worker.cancel_current_job()
+		self.worker_thread.cancel_current_job()
 		
 
 class SendorQueueUnitTest(unittest.TestCase):

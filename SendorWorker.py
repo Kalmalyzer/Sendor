@@ -5,12 +5,9 @@ import multiprocessing.queues
 import os
 import shutil
 import unittest
-import thread
 import traceback
 
-import Queue
-
-from SendorJob import SendorTask, SendorAction, SendorActionContext
+from SendorJob import SendorJob, SendorTask, SendorAction, SendorActionContext
 
 logger = logging.getLogger('SendorWorker')
 
@@ -94,30 +91,12 @@ def initialize_sendor_worker_process(queue, cancel):
 	start_sendor_worker_task.queue = queue
 	start_sendor_worker_task.cancel = cancel
 	
+
 class SendorWorker(object):
 
-	def __init__(self, num_processes, pending_jobs, past_jobs):
+	def __init__(self, num_processes):
 		self.num_processes = num_processes
-		self.pending_jobs = pending_jobs
-		self.past_jobs = past_jobs
-		thread.start_new_thread((lambda sendor_worker: sendor_worker.sendor_processing_thread()), (self,))
-		self.current_job = None
 		self.cancel = multiprocessing.Event()
-
-	def sendor_processing_thread(self):
-	
-		while True:
-			logger.debug("waiting for any jobs to be enqueued")
-			job = self.pending_jobs.get()
-			logger.debug("processing job")
-			self.current_job_is_canceled = False
-			self.current_job = job
-
-			self.run_job(job)
-
-			self.current_job = None
-			self.pending_jobs.task_done()
-			self.past_jobs.put(job)
 
 	def cancel_current_job(self):
 		self.cancel.set()
@@ -197,7 +176,7 @@ class DummySendorAction(SendorAction):
 class SendorTaskProcessUnitTest(unittest.TestCase):
 
 	def setUp(self):
-		pass
+		os.mkdir('unittest')
 	
 	def test_sendor_worker_run(self):
 
@@ -205,15 +184,19 @@ class SendorTaskProcessUnitTest(unittest.TestCase):
 		for i in range(5):
 			task = SendorTask()
 			task.actions = [DummySendorAction()]
+			task.set_queue_info(i, 'unittest/job/' + str(i))
 			tasks.append(task)
 
-		processing = SendorWorker(4, Queue.Queue(), Queue.Queue())
-		processing.run(tasks)
+		job = SendorJob(tasks)
+		job.set_queue_info(0, 'unittest/job')
+
+		processing = SendorWorker(4)
+		processing.run_job(job)
 	
 		pass
 	
 	def tearDown(self):
-		pass
+		shutil.rmtree('unittest')
 	
 if __name__ == '__main__':
 	logging.basicConfig(level=logging.DEBUG)
