@@ -152,7 +152,7 @@ class SendorTask(object):
 		return self.progress
 		
 	def append_log(self, log):
-		self.progress = log
+		self.log = self.log + log
 
 	def get_log(self):
 		return self.log
