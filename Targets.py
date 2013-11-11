@@ -4,8 +4,7 @@ import logging
 import os
 import unittest
 
-from actions import TestIfFileUpToDateOnTargetAction
-from SendorJob import SendorTask, SendorAction
+from SendorJob import SendorAction
 
 import target_distribution_methods
 
@@ -35,10 +34,10 @@ class Targets(object):
 			raise Exception("id " + id + " does not exist in targets")
 
 		target = self.targets[id]
-		actions = [ LogDistributionAction("Started", filename, target),
-			TestIfFileUpToDateOnTargetAction(filename, sha1sum, target),
-			target_distribution_methods.create_action(source, filename, sha1sum, size, target),
-			LogDistributionAction("Completed", filename, target) ]
+		actions = []
+		actions.append(LogDistributionAction("Started", filename, target))
+		actions.extend(target_distribution_methods.create_actions(source, filename, sha1sum, size, target))
+		actions.append(LogDistributionAction("Completed", filename, target))
 
 		return actions
 

@@ -3,9 +3,10 @@ import os.path
 
 import target_distribution_methods
 
-from actions import ParallelSftpSendFileAction
+from actions import TestIfFileUpToDateOnTargetAction, ParallelSftpSendFileAction
 
-def create_action(source, filename, sha1sum, size, target):	
-	return ParallelSftpSendFileAction(source, filename, sha1sum, size, target)
+def create_actions(source, filename, sha1sum, size, target):	
+	return [TestIfFileUpToDateOnTargetAction(filename, sha1sum, target),
+		ParallelSftpSendFileAction(source, filename, sha1sum, size, target)]
 
-target_distribution_methods.register('parallel_sftp', create_action)
+target_distribution_methods.register('parallel_sftp', create_actions)
