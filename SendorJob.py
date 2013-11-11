@@ -59,7 +59,7 @@ class SendorJob(object):
 			task_status = { 'description' : task.string_description(),
 							'state' : task.string_state(),
 							'activity' : task.get_activity(),
-							'progress' : task.get_progress(),
+							'completion_ratio' : task.get_completion_ratio(),
 							'log' : task.get_log() }
 			if task.start_time:
 				if task.end_time:
@@ -94,7 +94,7 @@ class SendorTask(object):
 		self.work_directory = None
 		self.start_time = None
 		self.end_time = None
-		self.progress = 0
+		self.completion_ratio = 0
 		self.activity = ""
 		self.log = ""
 
@@ -145,11 +145,11 @@ class SendorTask(object):
 	def get_activity(self):
 		return self.activity
 		
-	def set_progress(self, progress):
-		self.progress = progress
+	def set_completion_ratio(self, completion_ratio):
+		self.completion_ratio = completion_ratio
 
-	def get_progress(self):
-		return self.progress
+	def get_completion_ratio(self):
+		return self.completion_ratio
 		
 	def append_log(self, log):
 		self.log = self.log + log
@@ -175,7 +175,7 @@ class SendorActionContext(object):
 		return
 
 	@abstractmethod
-	def progress(self, progress):
+	def completion_ratio(self, completion_ratio):
 		return
 
 	@abstractmethod

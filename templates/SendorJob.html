@@ -20,13 +20,13 @@
 			{% set description = task['description'] %}
 			{% set state = task['state'] %}
 			{% set activity = task['activity'] %}
-			{% set progress = 100 * task['progress'] ~ "%" %}
+			{% set completion_ratio = 100 * task['completion_ratio'] ~ "%" %}
 			{% set log = task['log'] %}
 			{% set task_duration = task['duration'] %}
 			<tr>
 				<td>
 					{% if task_duration %}
-						{{description}}: {{ task_duration }}: {{ activity }} - {{ progress }}
+						{{description}}: {{ task_duration }}: {{ activity }} - {{ completion_ratio }}
 					{% else %}
 						{{description}}
 					{% endif %}

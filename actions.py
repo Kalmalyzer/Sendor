@@ -84,7 +84,7 @@ class TestIfFileUpToDateOnTargetAction(FabricAction):
 
 			if target_sha1sum == self.sha1sum:
 				context.activity("Remote file is up-to-date; skipping transfer")
-				context.progress(1.0)
+				context.completion_ratio(1.0)
 				context.file_up_to_date_on_target = True
 			else:
 				context.activity("Remote file is not up-to-date")
@@ -108,7 +108,7 @@ class SftpSendFileAction(FabricAction):
 				self.transferred = transferred
 				self.total = total
 				ratio = self.transferred / self.total
-				context.progress(ratio)
+				context.completion_ratio(ratio)
 
 			context.activity("Connecting to SSH server")
 			host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
@@ -165,7 +165,7 @@ class ParallelSftpSendFileAction(FabricAction):
 				
 				context.activity("Transferring chunks using SFTP")
 
-				progress_lock = threading.Lock()
+				completion_ratio_lock = threading.Lock()
 				
 				context.completed_chunks = 0
 				context.total_chunks = num_chunks
@@ -179,10 +179,10 @@ class ParallelSftpSendFileAction(FabricAction):
 				
 				def transfer_file_thread(context, tempfile, targetfile, target):
 					threadlocal.sftp.put(tempfile, targetfile, callback=None)
-					with progress_lock:
+					with completion_ratio_lock:
 						context.completed_chunks += 1
 						ratio = context.completed_chunks / context.total_chunks
-						context.progress(ratio)
+						context.completion_ratio(ratio)
 
 				# Bugfix for http://bugs.python.org/issue10015
 				if not hasattr(threading.current_thread(), "_children"):
@@ -221,8 +221,8 @@ class SendorActionTestContext(SendorActionContext):
 	def activity(self, activity):
 		logging.info("Activity: " + activity)
 
-	def progress(self, progress):
-		logging.info("Progress: " + str(int(progress * 100)) + "%")
+	def completion_ratio(self, completion_ratio):
+		logging.info("Completion ratio: " + str(int(completion_ratio * 100)) + "%")
 
 	def log(self, log):
 		logging.info("Log: " + log)

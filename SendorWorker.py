@@ -32,10 +32,10 @@ class ActivityQueueItem(QueueItem):
 		super(ActivityQueueItem, self).__init__(task_id, 'activity')
 		self.activity = activity
 
-class ProgressQueueItem(QueueItem):
-	def __init__(self, task_id, progress):
-		super(ProgressQueueItem, self).__init__(task_id, 'progress')
-		self.progress = progress
+class CompletionRatioQueueItem(QueueItem):
+	def __init__(self, task_id, completion_ratio):
+		super(CompletionRatioQueueItem, self).__init__(task_id, 'completion_ratio')
+		self.completion_ratio = completion_ratio
 
 class LogQueueItem(QueueItem):
 	def __init__(self, task_id, log):
@@ -59,8 +59,8 @@ class SendorWorkerActionContext(SendorActionContext):
 	def activity(self, activity):
 		self.worker_task.enqueue_activity(activity)
 
-	def progress(self, progress):
-		self.worker_task.enqueue_progress(progress)
+	def completion_ratio(self, completion_ratio):
+		self.worker_task.enqueue_completion_ratio(completion_ratio)
 
 	def log(self, log):
 		self.worker_task.enqueue_log(log)
@@ -77,8 +77,8 @@ class SendorWorkerTask(object):
 	def enqueue_activity(self, activity):
 		self.queue.put(ActivityQueueItem(self.args.task_id, activity))
 
-	def enqueue_progress(self, progress):
-		self.queue.put(ProgressQueueItem(self.args.task_id, progress))
+	def enqueue_completion_ratio(self, completion_ratio):
+		self.queue.put(CompletionRatioQueueItem(self.args.task_id, completion_ratio))
 
 	def enqueue_log(self, log):
 		self.queue.put(LogQueueItem(self.args.task_id, log))
@@ -173,9 +173,9 @@ class SendorWorker(object):
 				logger.debug("Activity: " + item.activity)
 				task.set_activity(item.activity)
 
-			elif item.item_type == 'progress':
-				logger.debug("Progress: " + str(int(item.progress * 100)) + "%")
-				task.set_progress(item.progress)
+			elif item.item_type == 'completion_ratio':
+				logger.debug("Completion ratio: " + str(int(item.completion_ratio * 100)) + "%")
+				task.set_completion_ratio(item.completion_ratio)
 
 			elif item.item_type == 'log':
 				logger.debug("Log: " + item.log)
@@ -200,8 +200,8 @@ class DummySendorAction(SendorAction):
 	def run(self, context):
 		context.activity("Dummy action initiated")
 		logger.info("Executing dummy sendor action")
-		context.progress(0.1)
-		context.progress(0.9)
+		context.completion_ratio(0.1)
+		context.completion_ratio(0.9)
 		context.activity("Dummy action completed")
 			
 class SendorTaskProcessUnitTest(unittest.TestCase):
