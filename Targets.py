@@ -4,7 +4,7 @@ import logging
 import os
 import unittest
 
-from SendorJob import SendorAction
+from SendorTask import SendorAction
 
 import target_distribution_methods
 

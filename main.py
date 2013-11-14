@@ -11,12 +11,10 @@ from flask import Flask
 from flask import Blueprint, Response, redirect, url_for, render_template, request
 from werkzeug import secure_filename
 
-from SendorJob import SendorJob
+from SendorTask import SendorTask
 from SendorQueue import SendorQueue
 from FileStash import FileStash
 from Targets import Targets
-
-from tasks import DistributeFileTask
 
 logger = logging.getLogger('main')
 
@@ -27,17 +25,29 @@ g_targets = None
 
 g_config = {}
 
-class SendorDistributionJob(SendorJob):
+class DistributeFileTask(SendorTask):
 
-	def __init__(self, stashed_file, tasks):
-		super(SendorDistributionJob, self).__init__(tasks)
-		self.stashed_file = stashed_file
+	def __init__(self, source, target, stashed_file_id):
+		super(DistributeFileTask, self).__init__()
+		self.source = source
+		self.target = target
+		self.stashed_file = g_file_stash.lock(stashed_file_id)
+
+	def string_description(self):
+		return "Distribute file " + self.source + " to " + self.target
 
 	def completed(self):
-		super(SendorDistributionJob, self).completed()
+		super(DistributeFileTask, self).completed()
 		g_file_stash.unlock(self.stashed_file)
 
-		
+	def failed(self):
+		super(DistributeFileTask, self).failed()
+		g_file_stash.unlock(self.stashed_file)
+	
+	def canceled(self):
+		super(DistributeFileTask, self).canceled()
+		g_file_stash.unlock(self.stashed_file)
+
 def create_ui(upload_folder):
 
 	ui_app = Blueprint('ui', __name__)
@@ -46,37 +56,26 @@ def create_ui(upload_folder):
 	@ui_app.route('/index.html', methods = ['GET'])
 	def index():
 	
-		if request.args.get('cancel'):
-			g_sendor_queue.cancel_current_job()
+#		if request.args.get('cancel'):
+#			g_sendor_queue.cancel_current_job()
 
 		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
 		latest_uploaded_file = []
 		if len(file_stash) != 0:
 			latest_uploaded_file = [file_stash[-1].to_json()]
 	
-		pending_jobs = []
-		for job in reversed(list(g_sendor_queue.pending_jobs.queue)):
-			pending_jobs.append(job.progress())
-
-		current_job = None
-		if g_sendor_queue.worker_thread.current_job:
-			current_job = g_sendor_queue.worker_thread.current_job.progress()
-
-		past_jobs = []
-		for job in reversed(list(g_sendor_queue.past_jobs.queue)):
-			past_jobs.append(job.progress())
+		tasks = []
+		for task in reversed(g_sendor_queue.list()):
+			tasks.append(task.progress())
 
 		return render_template('index.html',
 			file_stash = latest_uploaded_file,
-			pending_jobs = pending_jobs,
-			current_job = current_job,
-			past_jobs = past_jobs)
+			tasks = tasks)
 
 	@ui_app.route('/file_stash.html', methods = ['GET'])
 	def file_stash():
 
 		if request.args.get('clear'):
-			g_sendor_queue.cancel_current_job()
 			g_file_stash.remove_all_unlocked_files()
 	
 		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
@@ -115,18 +114,17 @@ def create_ui(upload_folder):
 		elif request.method == 'POST':
 
 			target_ids = request.form.getlist('target')
-			id = request.form.get('file')
-			stashed_file = g_file_stash.lock(id)
+			stashed_file_id = request.form.get('file')
+			stashed_file = g_file_stash.lock(stashed_file_id)
 
-			distribute_file_tasks = []
-			for id in target_ids:
-				distribute_file_task = DistributeFileTask(stashed_file.original_filename, id)
-				distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, id)
-				distribute_file_task.actions.extend(distribute_file_actions)
-				distribute_file_tasks.append(distribute_file_task)
-
-			job = SendorDistributionJob(stashed_file, distribute_file_tasks)
-			g_sendor_queue.add(job)
+			try:
+				for target_id in target_ids:
+					distribute_file_task = DistributeFileTask(stashed_file.original_filename, target_id, stashed_file_id)
+					distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, target_id)
+					distribute_file_task.actions.extend(distribute_file_actions)
+					g_sendor_queue.add(distribute_file_task)
+			finally:
+				g_file_stash.unlock(stashed_file)
 
 			return redirect('index.html')
 

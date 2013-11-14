@@ -24,61 +24,6 @@ def format_timedelta(duration):
 		
 	return result
 
-
-class SendorJob(object):
-
-	def __init__(self, tasks=None):
-		self.job_id = None
-		self.work_directory = None
-		self.enqueue_time = None
-		self.start_time = None
-		self.end_time = None
-		if tasks:
-			self.tasks = tasks
-		else:
-			self.tasks = []
-
-	def started(self):
-		self.start_time = datetime.datetime.utcnow()
-
-	def completed(self):
-		self.end_time = datetime.datetime.utcnow()
-
-	def progress(self):
-		status = { 'enqueue_time' : format_datetime(self.enqueue_time) }
-		
-		if self.start_time:
-			if self.end_time:
-				duration = self.end_time - self.start_time
-			else:
-				duration = datetime.datetime.utcnow() - self.start_time
-			status['duration'] = format_timedelta(duration)
-
-		tasks_status = []
-		for task in self.tasks[0:]:
-			task_status = { 'description' : task.string_description(),
-							'state' : task.string_state(),
-							'activity' : task.get_activity(),
-							'completion_ratio' : task.get_completion_ratio(),
-							'log' : task.get_log() }
-			if task.start_time:
-				if task.end_time:
-					duration = task.end_time - task.start_time
-				else:
-					duration = datetime.datetime.utcnow() - task.start_time
-				task_status['duration'] = format_timedelta(duration)
-			
-			tasks_status.append(task_status)
-
-		status['tasks'] = tasks_status
-			
-		return status
-
-	def set_queue_info(self, job_id, work_directory):
-		self.job_id = job_id
-		self.work_directory = work_directory
-		self.enqueue_time = datetime.datetime.utcnow()
-		
 class SendorTask(object):
 
 	NOT_STARTED = 0
@@ -92,6 +37,7 @@ class SendorTask(object):
 		self.actions = []
 		self.task_id = None
 		self.work_directory = None
+		self.enqueue_time = None
 		self.start_time = None
 		self.end_time = None
 		self.completion_ratio = 0
@@ -157,6 +103,28 @@ class SendorTask(object):
 	def get_log(self):
 		return self.log
 
+	def progress(self):
+		duration_string = None
+		if self.start_time:
+			if self.end_time:
+				duration = self.end_time - self.start_time
+			else:
+				duration = datetime.datetime.utcnow() - self.start_time
+			duration_string = format_timedelta(duration)
+
+		enqueue_time_string = None
+		if self.enqueue_time:
+			enqueue_time_string = format_datetime(self.enqueue_time)
+
+		status = { 'description' : self.string_description(),
+			'enqueue_time' : enqueue_time_string,
+			'duration' : duration_string,
+			'state' : self.string_state(),
+			'activity' : self.get_activity(),
+			'completion_ratio' : self.get_completion_ratio(),
+			'log' : self.get_log() }
+			
+		return status
 
 class SendorActionContext(object):
 	__metaclass__ = ABCMeta

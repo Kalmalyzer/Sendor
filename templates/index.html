@@ -1,7 +1,7 @@
 
 {% extends "base.html" %}
 
-{% import "SendorJob.html" as SendorJob %}
+{% import "SendorTask.html" as SendorTask %}
 {% import "FileStash.html" as FileStash %}
 
 {% block content %}
@@ -11,32 +11,17 @@
 <br>
 
 <div>
-<h2> Latest uploaded file </h2>
-{% if file_stash %}
-{{ FileStash.FileStash(file_stash, True) }}
-{% endif %}
-
+	<h2> Latest uploaded file </h2>
+	{% if file_stash %}
+		{{ FileStash.FileStash(file_stash, True) }}
+	{% endif %}
 </div>
 
-<h2> Pending jobs </h2>
 <div>
-{% for job in pending_jobs %}
-{{ SendorJob.SendorJob(job) }}
-{% endfor %}
-
-<h2> Current job </h2>
-
-{% if current_job %}
-
-<a href="index.html?cancel=True" class="btn btn-primary">Cancel this job</a>
-
-{{ SendorJob.SendorJob(current_job) }}
-{% endif %}
-
-<h2> Past jobs </h2>
-
-{% for job in past_jobs %}
-{{ SendorJob.SendorJob(job) }}
-{% endfor %}
+	<h2> Tasks </h2>
+	{% for task in tasks %}
+		{{ SendorTask.SendorTask(task) }}
+	{% endfor %}
+</div>
 
 {% endblock %}

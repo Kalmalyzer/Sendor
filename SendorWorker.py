@@ -4,52 +4,54 @@ import multiprocessing
 import multiprocessing.queues
 import os
 import shutil
-import unittest
+import thread
+import threading
 import traceback
+import unittest
 
-from SendorJob import SendorJob, SendorTask, SendorAction, SendorActionContext
+from SendorTask import SendorTask, SendorAction, SendorActionContext
 
 logger = logging.getLogger('SendorWorker')
 
 class SendorWorkerTaskArgs(object):
-	def __init__(self, task_id, work_directory, actions):
-		self.task_id = task_id
+	def __init__(self, task_in_flight_id, work_directory, actions):
+		self.task_in_flight_id = task_in_flight_id
 		self.actions = actions
 		self.work_directory = work_directory
 
 class QueueItem(object):
-	def __init__(self, task_id, item_type):
-		self.task_id = task_id
+	def __init__(self, task_in_flight_id, item_type):
+		self.task_in_flight_id = task_in_flight_id
 		self.item_type = item_type
 
 class StatusQueueItem(QueueItem):
-	def __init__(self, task_id, status):
-		super(StatusQueueItem, self).__init__(task_id, 'status')
+	def __init__(self, task_in_flight_id, status):
+		super(StatusQueueItem, self).__init__(task_in_flight_id, 'status')
 		self.status = status
 
 class ActivityQueueItem(QueueItem):
-	def __init__(self, task_id, activity):
-		super(ActivityQueueItem, self).__init__(task_id, 'activity')
+	def __init__(self, task_in_flight_id, activity):
+		super(ActivityQueueItem, self).__init__(task_in_flight_id, 'activity')
 		self.activity = activity
 
 class CompletionRatioQueueItem(QueueItem):
-	def __init__(self, task_id, completion_ratio):
-		super(CompletionRatioQueueItem, self).__init__(task_id, 'completion_ratio')
+	def __init__(self, task_in_flight_id, completion_ratio):
+		super(CompletionRatioQueueItem, self).__init__(task_in_flight_id, 'completion_ratio')
 		self.completion_ratio = completion_ratio
 
 class LogQueueItem(QueueItem):
-	def __init__(self, task_id, log):
-		super(LogQueueItem, self).__init__(task_id, 'log')
+	def __init__(self, task_in_flight_id, log):
+		super(LogQueueItem, self).__init__(task_in_flight_id, 'log')
 		self.log = log
 
 class StdOutQueueItem(QueueItem):
-	def __init__(self, task_id, message):
-		super(StdOutQueueItem, self).__init__(task_id, 'stdout')
+	def __init__(self, task_in_flight_id, message):
+		super(StdOutQueueItem, self).__init__(task_in_flight_id, 'stdout')
 		self.message = message
 
 class TaskDoneQueueItem(QueueItem):
-	def __init__(self, task_id):
-		super(TaskDoneQueueItem, self).__init__(task_id, 'task_done')
+	def __init__(self, task_in_flight_id):
+		super(TaskDoneQueueItem, self).__init__(task_in_flight_id, 'task_done')
 
 class SendorWorkerActionContext(SendorActionContext):
 	def __init__(self, worker_task, work_directory):
@@ -72,22 +74,22 @@ class SendorWorkerTask(object):
 		self.args = args
 
 	def enqueue_status(self, status):
-		self.queue.put(StatusQueueItem(self.args.task_id, status))
+		self.queue.put(StatusQueueItem(self.args.task_in_flight_id, status))
 
 	def enqueue_activity(self, activity):
-		self.queue.put(ActivityQueueItem(self.args.task_id, activity))
+		self.queue.put(ActivityQueueItem(self.args.task_in_flight_id, activity))
 
 	def enqueue_completion_ratio(self, completion_ratio):
-		self.queue.put(CompletionRatioQueueItem(self.args.task_id, completion_ratio))
+		self.queue.put(CompletionRatioQueueItem(self.args.task_in_flight_id, completion_ratio))
 
 	def enqueue_log(self, log):
-		self.queue.put(LogQueueItem(self.args.task_id, log))
+		self.queue.put(LogQueueItem(self.args.task_in_flight_id, log))
 
 	def enqueue_stdout(self, message):
-		self.queue.put(StdOutQueueItem(self.args.task_id, message))
+		self.queue.put(StdOutQueueItem(self.args.task_in_flight_id, message))
 
 	def enqueue_task_done(self):
-		self.queue.put(TaskDoneQueueItem(self.args.task_id))
+		self.queue.put(TaskDoneQueueItem(self.args.task_in_flight_id))
 	
 	def run(self):
 		try:
@@ -95,6 +97,7 @@ class SendorWorkerTask(object):
 				self.enqueue_status('canceled')
 			else:
 				self.enqueue_status('started')
+				os.mkdir(self.args.work_directory)
 				context = SendorWorkerActionContext(self, self.args.work_directory)
 				for action in self.args.actions:
 					action.run(context)
@@ -103,6 +106,7 @@ class SendorWorkerTask(object):
 			self.enqueue_status('failed')
 			self.enqueue_stdout(traceback.format_exc())
 		finally:
+			shutil.rmtree(self.args.work_directory, True)
 			self.enqueue_task_done()
 
 def start_sendor_worker_task(args):
@@ -116,86 +120,87 @@ def initialize_sendor_worker_process(queue, cancel):
 
 class SendorWorker(object):
 
+	unique_id = 0
+
 	def __init__(self, num_processes):
 		self.num_processes = num_processes
 		self.cancel = multiprocessing.Event()
+		self.queue = multiprocessing.queues.SimpleQueue()
+		self.pool = multiprocessing.Pool(processes=self.num_processes, initializer=initialize_sendor_worker_process, initargs=(self.queue, self.cancel))
+		self.tasks_in_flight_lock = threading.RLock()
+		self.tasks_in_flight = {}
+		self.worker_thread = thread.start_new_thread((lambda sendor_worker: sendor_worker.worker_process_result_thread()), (self,))
+		self.task_done = threading.Event()
 
-	def cancel_current_job(self):
-		self.cancel.set()
-
-	def run_job(self, job):
-			
-		os.mkdir(job.work_directory)
-		for task in job.tasks:
-			os.mkdir(task.work_directory)
-
-		job.started()
-		self.run_tasks(job.tasks)
-		job.completed()
-			
-		shutil.rmtree(job.work_directory)
-		
-	def run_tasks(self, tasks):
+	def worker_process_result_thread(self):
+		while True:
+			item = self.queue.get()
+			self.handle_worker_queue_item(item)
 	
-		self.cancel.clear()
-		queue = multiprocessing.queues.SimpleQueue()
-		pool = multiprocessing.Pool(processes=self.num_processes, initializer=initialize_sendor_worker_process, initargs=(queue, self.cancel))
-
-		tasks_args = []
-
-		for i in range(len(tasks)):
-			task = tasks[i]
-			task_args = SendorWorkerTaskArgs(task_id=i, work_directory = task.work_directory, actions=task.actions)
-			tasks_args.append(task_args)
-			pool.apply_async(start_sendor_worker_task, (task_args, ))
+	def handle_worker_queue_item(self, item):
+		task_in_flight_id = item.task_in_flight_id
+		with self.tasks_in_flight_lock:
+			task = self.tasks_in_flight.get(task_in_flight_id)
 		
-		tasks_left = len(tasks)
-		while tasks_left > 0:
-			item = queue.get()
-			
-			task_id = item.task_id
-			task = tasks[task_id]
-			
-			if item.item_type == 'status':
-				logger.debug("Status: " + item.status)
-				if item.status == 'started':
-					task.started()
-				elif item.status == 'completed':
-					task.completed()
-				elif item.status == 'failed':
-					task.failed()
-				elif item.status == 'canceled':
-					task.canceled()
-				else:
-					raise Error("Unknown status: " + item.status)
-					
-			elif item.item_type == 'activity':
-				logger.debug("Activity: " + item.activity)
-				task.set_activity(item.activity)
-
-			elif item.item_type == 'completion_ratio':
-				logger.debug("Completion ratio: " + str(int(item.completion_ratio * 100)) + "%")
-				task.set_completion_ratio(item.completion_ratio)
-
-			elif item.item_type == 'log':
-				logger.debug("Log: " + item.log)
-				task.append_log(item.log)
-
-			elif item.item_type == 'stdout':
-				logger.debug("Stdout: " + item.message)
-				task.append_log(item.message)
-
-			elif item.item_type == 'task_done':
-				tasks_left -= 1
-				logger.debug("tasks_left: " + str(tasks_left))
+		if item.item_type == 'status':
+			logger.debug("Status: " + item.status)
+			if item.status == 'started':
+				task.started()
+			elif item.status == 'completed':
+				task.completed()
+			elif item.status == 'failed':
+				task.failed()
+			elif item.status == 'canceled':
+				task.canceled()
 			else:
-				raise Exception("Unknown type: " + item.item_type)
+				raise Error("Unknown status: " + item.status)
+				
+		elif item.item_type == 'activity':
+			logger.debug("Activity: " + item.activity)
+			task.set_activity(item.activity)
 
-		logger.debug("waiting for all pools to complete")
-		pool.close()
-		pool.join()
-		logger.debug("all pools completed")
+		elif item.item_type == 'completion_ratio':
+			logger.debug("Completion ratio: " + str(int(item.completion_ratio * 100)) + "%")
+			task.set_completion_ratio(item.completion_ratio)
 
+		elif item.item_type == 'log':
+			logger.debug("Log: " + item.log)
+			task.append_log(item.log)
+
+		elif item.item_type == 'stdout':
+			logger.debug("Stdout: " + item.message)
+			task.append_log(item.message)
+
+		elif item.item_type == 'task_done':
+			logger.debug("task_done")
+			self.task_done.set()
+			self.remove(task_in_flight_id)
+		else:
+			raise Exception("Unknown type: " + item.item_type)
+
+#	def cancel_current_job(self):
+#		self.cancel.set()
+
+	def add(self, task):
+		task_in_flight_id = self.unique_id
+		task_args = SendorWorkerTaskArgs(task_in_flight_id=task_in_flight_id, work_directory=task.work_directory, actions=task.actions)
+		with self.tasks_in_flight_lock:
+			self.tasks_in_flight[task_in_flight_id] = task
+			self.unique_id += 1
+		self.pool.apply_async(start_sendor_worker_task, (task_args, ))
+
+	def remove(self, task_in_flight_id):
+		with self.tasks_in_flight_lock:
+			del self.tasks_in_flight[task_in_flight_id]
+		
+	def join(self, task):
+		while True:
+			with self.tasks_in_flight_lock:
+				tasks = self.tasks_in_flight.values()[:]
+			if not task in tasks:
+				break
+			self.task_done.wait()
+		
 class DummySendorAction(SendorAction):
 	def run(self, context):
 		context.activity("Dummy action initiated")
@@ -215,16 +220,15 @@ class SendorTaskProcessUnitTest(unittest.TestCase):
 		for i in range(5):
 			task = SendorTask()
 			task.actions = [DummySendorAction()]
-			task.set_queue_info(i, 'unittest/job/' + str(i))
+			task.set_queue_info(i, 'unittest/' + str(i))
 			tasks.append(task)
 
-		job = SendorJob(tasks)
-		job.set_queue_info(0, 'unittest/job')
-
 		processing = SendorWorker(4)
-		processing.run_job(job)
-	
-		pass
+		for task in tasks:
+			processing.add(task)
+
+		for task in tasks:
+			processing.join(task)
 	
 	def tearDown(self):
 		shutil.rmtree('unittest')

@@ -1,0 +1,43 @@
+
+{% macro SendorTask(task) %}
+<table class="table table-striped">
+	<tbody>
+		{% set description = task['description'] %}
+		{% set state = task['state'] %}
+		{% set activity = task['activity'] %}
+		{% set completion_ratio = 100 * task['completion_ratio'] ~ "%" %}
+		{% set log = task['log'] %}
+		{% set enqueue_time = task['enqueue_time'] %}
+		{% set duration = task['duration'] %}
+		<tr>
+			<td>
+				{% if duration %}
+					{{description}}: {{ duration }}: {{ activity }} - {{ completion_ratio }}
+				{% else %}
+					{{description}}
+				{% endif %}
+				<div>
+					{% if log != "" %}
+					<pre>{{log}}</pre>
+					{% endif %}
+				</div>
+			</td>
+			<td>
+				{% if state == 'not_started' %}
+					<button type="button" disabled="disabled" class="btn btn-default">Not started</button>
+				{% elif state == 'in_progress' %}
+					<button type="button" disabled="disabled" class="btn btn-warning">In progress</button>
+				{% elif state == 'completed' %}
+					<button type="button" disabled="disabled" class="btn btn-success">Done</button>
+				{% elif state == 'failed' %}
+					<button type="button" disabled="disabled" class="btn btn-danger">Failed</button>	
+				{% elif state == 'canceled' %}
+					<button type="button" disabled="disabled" class="btn btn-inverse">Canceled</button>	
+				{% else %}
+					Error: Unknown state!
+				{% endif %}
+			</td>
+		</tr>
+	</tbody>
+</table>
+{% endmacro %}

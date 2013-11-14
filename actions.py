@@ -14,7 +14,7 @@ import fabric.api
 from fabric.api import local, run, settings
 import fabric.network
 
-from SendorJob import SendorTask, SendorAction, SendorActionContext
+from SendorTask import SendorAction, SendorActionContext
 
 threadlocal = threading.local()
 
