@@ -8,7 +8,7 @@ Task = Backbone.Model.extend({
 
 Tasks = Backbone.Collection.extend({
 	model: Task,
-	url: "tasks",
+	url: "../api/tasks",
 
 	initialize: function() {
 	},

@@ -52,15 +52,6 @@ def create_ui(upload_folder):
 
 	ui_app = Blueprint('ui', __name__)
 
-	@ui_app.route('/tasks', methods = ['GET'])
-	def tasks():
-		tasks = g_sendor_queue.list()
-		tasks_progress = []
-		for task in tasks:
-			tasks_progress.append(task.progress())
-
-		return jsonify(collection=tasks_progress)
-	
 	@ui_app.route('/')
 	@ui_app.route('/index.html', methods = ['GET'])
 	def index():
@@ -144,6 +135,12 @@ def create_ui(upload_folder):
 def create_api():
 
 	api_app = Blueprint('api', __name__)
+	@api_app.route('/tasks', methods = ['GET'])
+	def tasks():
+		tasks = g_sendor_queue.list()
+		tasks_progress = [task.progress() for task in tasks]
+		return jsonify(collection=tasks_progress)
+	
 	@api_app.route('/file_stash/<file_id>/delete', methods = ['POST'])
 	def file_stash_delete(file_id):
 		g_file_stash.remove(file_id)
