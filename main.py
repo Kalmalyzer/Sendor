@@ -8,7 +8,7 @@ import os
 
 import flask.config
 from flask import Flask
-from flask import Blueprint, Response, redirect, url_for, render_template, request
+from flask import Blueprint, Response, redirect, url_for, render_template, request, jsonify
 from werkzeug import secure_filename
 
 from SendorTask import SendorTask
@@ -52,6 +52,15 @@ def create_ui(upload_folder):
 
 	ui_app = Blueprint('ui', __name__)
 
+	@ui_app.route('/tasks', methods = ['GET'])
+	def tasks():
+		tasks = g_sendor_queue.list()
+		tasks_progress = []
+		for task in tasks:
+			tasks_progress.append(task.progress())
+
+		return jsonify(collection=tasks_progress)
+	
 	@ui_app.route('/')
 	@ui_app.route('/index.html', methods = ['GET'])
 	def index():

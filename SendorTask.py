@@ -116,7 +116,8 @@ class SendorTask(object):
 		if self.enqueue_time:
 			enqueue_time_string = format_datetime(self.enqueue_time)
 
-		status = { 'description' : self.string_description(),
+		status = { 'task_id' : self.task_id,
+			'description' : self.string_description(),
 			'enqueue_time' : enqueue_time_string,
 			'duration' : duration_string,
 			'state' : self.string_state(),
