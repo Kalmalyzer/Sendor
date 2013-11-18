@@ -64,13 +64,8 @@ def create_ui(upload_folder):
 		if len(file_stash) != 0:
 			latest_uploaded_file = [file_stash[-1].to_json()]
 	
-		tasks = []
-		for task in reversed(g_sendor_queue.list()):
-			tasks.append(task.progress())
-
 		return render_template('index.html',
-			file_stash = latest_uploaded_file,
-			tasks = tasks)
+			file_stash = latest_uploaded_file)
 
 	@ui_app.route('/file_stash.html', methods = ['GET'])
 	def file_stash():
