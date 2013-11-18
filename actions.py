@@ -62,6 +62,7 @@ class CopyFileAction(FabricAction):
 		target = context.translate_path(self.target)
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.activity("Copy completed")
+		context.completion_ratio(1.0)
 
 class TestIfFileUpToDateOnTargetAction(FabricAction):
 
