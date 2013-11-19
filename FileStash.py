@@ -49,7 +49,7 @@ class StashedFile(RefCount):
 		self.size = size
 
 	def to_json(self):
-		return { 'id' : self.file_id,
+		return { 'file_id' : self.file_id,
 			'original_filename' : self.original_filename,
 			'sha1sum' : self.physical_file.sha1sum,
 			'timestamp' : str(self.timestamp),

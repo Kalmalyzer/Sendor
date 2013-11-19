@@ -1,13 +1,13 @@
 
-Task = Backbone.Model.extend({
+SendorTask = Backbone.Model.extend({
 	idAttribute: "task_id",
 
 	initialize: function() {
 	}
 });
 
-Tasks = Backbone.Collection.extend({
-	model: Task,
+SendorTasks = Backbone.Collection.extend({
+	model: SendorTask,
 	url: "../api/tasks",
 
 	initialize: function() {
@@ -18,10 +18,10 @@ Tasks = Backbone.Collection.extend({
 	}
 });
 
-TaskView = Backbone.View.extend({
+SendorTaskView = Backbone.View.extend({
 	tagName: "tr",
 
-	template: _.template($('#taskview-template').html()),
+	template: _.template($('#SendorTaskView-template').html()),
 	
 	initialize: function() {
 		this.listenTo(this.model, "change", this.change);
@@ -38,7 +38,7 @@ TaskView = Backbone.View.extend({
 	}
 });
 
-var TasksView = Backbone.View.extend({
+var SendorTasksView = Backbone.View.extend({
 	tagName: "table",
 	className: "table table-striped",
 
@@ -49,7 +49,7 @@ var TasksView = Backbone.View.extend({
 	},
 
 	add: function(task) {
-		var taskView = new TaskView({model: task});
+		var taskView = new SendorTaskView({model: task});
 		taskView.render();
 		this.$el.append(taskView.el);
 		return this;
@@ -64,7 +64,7 @@ var TasksView = Backbone.View.extend({
     render: function() {
 		this.$el.empty();
 		this.collection.each(function(task) {
-				var taskView = new TaskView({model: task});
+				var taskView = new SendorTaskView({model: task});
 				taskView.render();
 				this.$el.append(taskView.el);
 			}, this);
@@ -73,8 +73,8 @@ var TasksView = Backbone.View.extend({
 });
 
 
-var tasks = new Tasks();
-var tasksView = new TasksView({collection: tasks});
+var tasks = new SendorTasks();
+var tasksView = new SendorTasksView({collection: tasks});
 tasks.fetch({reset: true});
 
 $('#tasks').html(tasksView.el);

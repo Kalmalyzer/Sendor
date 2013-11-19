@@ -58,28 +58,8 @@ def create_ui(upload_folder):
 	
 #		if request.args.get('cancel'):
 #			g_sendor_queue.cancel_current_job()
-
-		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
-		latest_uploaded_file = []
-		if len(file_stash) != 0:
-			latest_uploaded_file = [file_stash[-1].to_json()]
 	
-		return render_template('index.html',
-			file_stash = latest_uploaded_file)
-
-	@ui_app.route('/file_stash.html', methods = ['GET'])
-	def file_stash():
-
-		if request.args.get('clear'):
-			g_file_stash.remove_all_unlocked_files()
-	
-		file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
-		file_stash_contents = []
-		for file in file_stash:
-			file_stash_contents.append(file.to_json())
-	
-		return render_template('file_stash.html',
-			file_stash = file_stash_contents)
+		return render_template('index.html')
 
 	@ui_app.route('/upload.html', methods = ['GET', 'POST'])
 	def upload():
@@ -130,12 +110,19 @@ def create_ui(upload_folder):
 def create_api():
 
 	api_app = Blueprint('api', __name__)
+
 	@api_app.route('/tasks', methods = ['GET'])
 	def tasks():
 		tasks = g_sendor_queue.list()
 		tasks_progress = [task.progress() for task in tasks]
 		return jsonify(collection=tasks_progress)
-	
+
+	@api_app.route('/file_stash', methods = ['GET'])
+	def file_stash():
+		sorted_file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
+		file_stash_contents = [file.to_json() for file in sorted_file_stash]
+		return jsonify(collection=file_stash_contents)
+		
 	@api_app.route('/file_stash/<file_id>/delete', methods = ['POST'])
 	def file_stash_delete(file_id):
 		g_file_stash.remove(file_id)
