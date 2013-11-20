@@ -22,10 +22,14 @@ StashedFileView = Backbone.View.extend({
 	tagName: "tr",
 
 	template: _.template($('#StashedFileView-template').html()),
+
+	events: {
+		"click #delete": "deleteRequest"
+	},	
 	
 	initialize: function() {
 		this.listenTo(this.model, "change", this.change);
-	 },
+	},
 
 	render: function() {
 		this.$el.html(this.template(this.model.toJSON()));
@@ -35,6 +39,11 @@ StashedFileView = Backbone.View.extend({
 	change: function() {
 		this.$el.html(this.template(this.model.toJSON()));
 		return this;
+	},
+	
+	deleteRequest: function() {
+		$.ajax({ url: this.model.url() + '/delete',
+			type: 'DELETE' });
 	}
 });
 
@@ -43,33 +52,18 @@ var FileStashView = Backbone.View.extend({
 	className: "table table-bordered table-hover",
 
 	initialize: function() {
-		this.listenTo(this.collection, 'reset', this.render);
-		this.listenTo(this.collection, 'add', this.add);
-		this.listenTo(this.collection, 'remove', this.remove);
-	},
-
-	add: function(stashedFile) {
-		var stashedFileView = new StashedFileView({model: stashedFile});
-		stashedFileView.render();
-		this.$el.append(stashedFileView.el);
-		return this;
-	},
-
-	remove: function(stashedFile) {
-		// TODO: implement removal of element from DOM tree
-		console.log("Not yet implemented");
-		debugger;
+		this.listenTo(this.collection, 'add remove reset', this.render);
 	},
 
     render: function() {
 		this.$el.empty();
 		this.collection.each(function(stashedFile) {
-				var stashedFileView = new StashedFileView({model: stashedFile});
-				stashedFileView.render();
-				this.$el.append(stashedFileView.el);
+			var stashedFileView = new StashedFileView({model: stashedFile});
+			stashedFileView.render();
+			this.$el.append(stashedFileView.el);
 			}, this);
 		return this;
-	}
+	},
 });
 
 var fileStash = new FileStash();

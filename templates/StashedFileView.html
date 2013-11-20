@@ -1,5 +1,10 @@
 <script id="StashedFileView-template" type="text/template">
 	<td>
+		<% if (is_deletable) { %>
+			<button id="delete" type="button" class="btn btn-default">Delete</button>
+		<% } %>
+	</td>
+	<td>
 		<%- original_filename %>
 	</td>
 	<td>

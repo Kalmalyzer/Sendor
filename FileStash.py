@@ -53,7 +53,8 @@ class StashedFile(RefCount):
 			'original_filename' : self.original_filename,
 			'sha1sum' : self.physical_file.sha1sum,
 			'timestamp' : str(self.timestamp),
-			'size' : str(self.size) }
+			'size' : str(self.size),
+			'is_deletable' : self.ref_count() == 0 }
 
 class FileStash(object):
 

@@ -123,7 +123,7 @@ def create_api():
 		file_stash_contents = [file.to_json() for file in sorted_file_stash]
 		return jsonify(collection=file_stash_contents)
 		
-	@api_app.route('/file_stash/<file_id>/delete', methods = ['POST'])
+	@api_app.route('/file_stash/<file_id>/delete', methods = ['DELETE'])
 	def file_stash_delete(file_id):
 		g_file_stash.remove(file_id)
 		return ""
