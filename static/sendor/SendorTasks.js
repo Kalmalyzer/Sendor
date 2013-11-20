@@ -43,22 +43,7 @@ var SendorTasksView = Backbone.View.extend({
 	className: "table table-striped",
 
 	initialize: function() {
-		this.listenTo(this.collection, 'reset', this.render);
-		this.listenTo(this.collection, 'add', this.add);
-		this.listenTo(this.collection, 'remove', this.remove);
-	},
-
-	add: function(task) {
-		var taskView = new SendorTaskView({model: task});
-		taskView.render();
-		this.$el.append(taskView.el);
-		return this;
-	},
-
-	remove: function(task) {
-		// TODO: implement removal of element from DOM tree
-		console.log("Not yet implemented");
-		debugger;
+		this.listenTo(this.collection, 'add remove reset', this.render);
 	},
 
     render: function() {
