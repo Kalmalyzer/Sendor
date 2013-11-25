@@ -165,6 +165,7 @@ def main(host_config_filename, targets_config_filename):
 
 	root = Flask(__name__)
 	root.config['host_description'] = g_config['host_description']
+	root.config['SEND_FILE_MAX_AGE_DEFAULT'] = 1
 
 	ui_app = create_ui(upload_folder)
 	root.register_blueprint(url_prefix = '/ui', blueprint = ui_app)
