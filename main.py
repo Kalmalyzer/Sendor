@@ -77,32 +77,6 @@ def create_ui(upload_folder):
 
 			return redirect('index.html')
 
-	@ui_app.route('/distribute.html/<id>', methods = ['GET', 'POST'])
-	def distribute(id):
-		if request.method == 'GET':
-			file_stash = [g_file_stash.get(id).to_json()]
-		
-			return Response(render_template('distribute.html',
-							file_stash = file_stash,
-							targets = g_targets.get_targets()))
-
-		elif request.method == 'POST':
-
-			target_ids = request.form.getlist('target')
-			stashed_file_id = request.form.get('file')
-			stashed_file = g_file_stash.lock(stashed_file_id)
-
-			try:
-				for target_id in target_ids:
-					distribute_file_task = DistributeFileTask(stashed_file.original_filename, target_id, stashed_file_id)
-					distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, target_id)
-					distribute_file_task.actions.extend(distribute_file_actions)
-					g_sendor_queue.add(distribute_file_task)
-			finally:
-				g_file_stash.unlock(stashed_file)
-
-			return redirect('index.html')
-
 	logger.info("Created ui")
 
 	return ui_app
@@ -117,6 +91,12 @@ def create_api():
 		tasks_progress = [task.progress() for task in tasks]
 		return jsonify(collection=tasks_progress)
 
+	@api_app.route('/targets', methods = ['GET'])
+	def targets():
+		targets = g_targets.get_targets()
+		targets_contents = [{ 'target_id' : target_id, 'name' : target_details['name'] } for (target_id, target_details) in targets.iteritems()]
+		return jsonify(collection=targets_contents)
+
 	@api_app.route('/file_stash', methods = ['GET'])
 	def file_stash():
 		sorted_file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
@@ -128,6 +108,20 @@ def create_api():
 		g_file_stash.remove(file_id)
 		return ""
 	
+	@api_app.route('/file_stash/<file_id>/distribute/<target_id>', methods = ['POST'])
+	def file_stash_distribute(file_id, target_id):
+		stashed_file = g_file_stash.lock(file_id)
+
+		try:
+			distribute_file_task = DistributeFileTask(stashed_file.original_filename, target_id, file_id)
+			distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, target_id)
+			distribute_file_task.actions.extend(distribute_file_actions)
+			g_sendor_queue.add(distribute_file_task)
+		finally:
+			g_file_stash.unlock(stashed_file)
+	
+		return ""
+
 	return api_app
 
 	

@@ -1,17 +1,24 @@
 
+Target = Backbone.Model.extend({
+	idAttribute: "target_id"
+});
+
+Targets = Backbone.Collection.extend({
+	model: Target,
+	url: "../api/targets",
+
+	parse: function(response) {
+		return response.collection;
+	}
+});
+
 StashedFile = Backbone.Model.extend({
 	idAttribute: "file_id",
-
-	initialize: function() {
-	}
 });
 
 FileStash = Backbone.Collection.extend({
 	model: StashedFile,
 	url: "../api/file_stash",
-
-	initialize: function() {
-	},
 
 	parse: function(response) {
 		return response.collection;
@@ -24,26 +31,64 @@ StashedFileView = Backbone.View.extend({
 	template: _.template($('#StashedFileView-template').html()),
 
 	events: {
-		"click #delete": "deleteRequest"
+		"click #delete": "deleteRequest",
+		"click #distribute": "toggleDistribute",
+		"click #distribute-submit": "distributeRequest",
+		"click #toggle-all-targets": "toggleAllTargets"
 	},	
 	
-	initialize: function() {
-		this.listenTo(this.model, "change", this.change);
+	initialize: function(stashedFile, targets) {
+		this.stashedFile = stashedFile;
+		this.targets = targets;
+		this.listenTo(this.stashedFile, "change", this.render);
+		this.listenTo(this.targets, "change", this.render);
+	},
+
+	dataJSON: function() {
+		return { stashed_file : this.stashedFile.toJSON(),
+			targets : this.targets.toJSON() };
 	},
 
 	render: function() {
-		this.$el.html(this.template(this.model.toJSON()));
-		return this;
-	},
-
-	change: function() {
-		this.$el.html(this.template(this.model.toJSON()));
+		this.$el.html(this.template(this.dataJSON()));
 		return this;
 	},
 	
 	deleteRequest: function() {
-		$.ajax({ url: this.model.url() + '/delete',
+		$.ajax({ url: this.stashedFile.url() + '/delete',
 			type: 'DELETE' });
+	},
+
+	toggleDistribute: function() {
+		var distributeSection = this.$('#distribute-section');
+		if (distributeSection.css('display') == 'none')
+			distributeSection.css('display', '');
+		else
+			distributeSection.css('display', 'none');
+	},
+	
+	distributeRequest: function(event) {
+		_.each(this.$('input:checkbox'), function(targetObject) {
+			if (targetObject.value != 'selectAll' && targetObject.checked)
+			{
+				var target_id = targetObject.value;
+				$.ajax({ url: this.stashedFile.url() + '/distribute/' + target_id,
+					type: 'POST' });
+			}
+		}, this);
+
+		// Disable the "Distribute!" button for 3 seconds
+		var submitButton = this.$('#distribute-submit');
+		submitButton.prop('disabled', true);
+		window.setTimeout(function() {
+				submitButton.prop('disabled', false);
+			}, 3000);
+	},
+	
+	toggleAllTargets: function() {
+		var checkAllTargets = $('#toggle-all-targets').prop('checked');
+		var checkBoxes = $('input:checkbox');
+		checkBoxes.prop('checked', checkAllTargets);
 	}
 });
 
@@ -51,14 +96,17 @@ var FileStashView = Backbone.View.extend({
 	tagName: "table",
 	className: "table table-bordered table-hover",
 
-	initialize: function() {
-		this.listenTo(this.collection, 'add remove reset', this.render);
+	initialize: function(fileStash, targets) {
+		this.fileStash = fileStash;
+		this.targets = targets;
+		this.listenTo(this.fileStash, 'add remove reset', this.render);
+		this.listenTo(this.targets, 'add remove reset', this.render);
 	},
 
     render: function() {
 		this.$el.empty();
-		this.collection.each(function(stashedFile) {
-			var stashedFileView = new StashedFileView({model: stashedFile});
+		this.fileStash.each(function(stashedFile) {
+			var stashedFileView = new StashedFileView(stashedFile, targets);
 			stashedFileView.render();
 			this.$el.append(stashedFileView.el);
 			}, this);
@@ -66,10 +114,13 @@ var FileStashView = Backbone.View.extend({
 	},
 });
 
+var targets = new Targets();
+targets.fetch({reset: true});
+window.setInterval(function(){ targets.fetch(); }, 10000);
+
 var fileStash = new FileStash();
-var fileStashView = new FileStashView({collection: fileStash});
 fileStash.fetch({reset: true});
-
-$('#file_stash').html(fileStashView.el);
-
 window.setInterval(function(){ fileStash.fetch(); }, 10000);
+
+var fileStashView = new FileStashView(fileStash, targets);
+$('#file_stash').html(fileStashView.el);

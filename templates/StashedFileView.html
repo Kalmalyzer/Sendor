@@ -1,16 +1,35 @@
 <script id="StashedFileView-template" type="text/template">
 	<td>
-		<% if (is_deletable) { %>
+		<button id="distribute" type="button" class="btn btn-default">Distribute</button>
+
+		<% if (stashed_file.is_deletable) { %>
 			<button id="delete" type="button" class="btn btn-default">Delete</button>
 		<% } %>
+
+		<div id="distribute-section" style="display:none">
+			<br>
+			<legend>Choose targets</legend>
+
+			<% _.each(targets, function(target) { %>
+				<label class="checkbox">
+					<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
+				</label>
+			<% }); %>
+			<br>
+			<label class="checkbox">
+				<input id="toggle-all-targets" type="checkbox" value="selectAll" checked>Select/Deselect All
+			</label>
+			<br>
+			<button id="distribute-submit" type="button" class="btn btn-default">Distribute!</button>
+		</div>
 	</td>
 	<td>
-		<%- original_filename %>
+		<%- stashed_file.original_filename %>
 	</td>
 	<td>
-		<%- size %>
+		<%- stashed_file.size %>
 	</td>
 	<td>
-		<%- timestamp %>
+		<%- stashed_file.timestamp %>
 	</td>
 </script>
