@@ -1,12 +1,13 @@
+'use strict';
 
-SendorTask = Backbone.Model.extend({
+var SendorTask = Backbone.Model.extend({
 	idAttribute: "task_id",
 
 	initialize: function() {
 	}
 });
 
-SendorTasks = Backbone.Collection.extend({
+var SendorTasks = Backbone.Collection.extend({
 	model: SendorTask,
 	url: "../api/tasks",
 
@@ -18,7 +19,7 @@ SendorTasks = Backbone.Collection.extend({
 	}
 });
 
-SendorTaskView = Backbone.View.extend({
+var SendorTaskView = Backbone.View.extend({
 	tagName: "tr",
 
 	template: _.template($('#SendorTaskView-template').html()),

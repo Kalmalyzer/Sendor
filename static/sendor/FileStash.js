@@ -1,9 +1,10 @@
+'use strict';
 
-Target = Backbone.Model.extend({
+var Target = Backbone.Model.extend({
 	idAttribute: "target_id"
 });
 
-Targets = Backbone.Collection.extend({
+var Targets = Backbone.Collection.extend({
 	model: Target,
 	url: "../api/targets",
 
@@ -12,11 +13,11 @@ Targets = Backbone.Collection.extend({
 	}
 });
 
-StashedFile = Backbone.Model.extend({
-	idAttribute: "file_id",
+var StashedFile = Backbone.Model.extend({
+	idAttribute: "file_id"
 });
 
-FileStash = Backbone.Collection.extend({
+var FileStash = Backbone.Collection.extend({
 	model: StashedFile,
 	url: "../api/file_stash",
 
@@ -25,7 +26,7 @@ FileStash = Backbone.Collection.extend({
 	}
 });
 
-StashedFileView = Backbone.View.extend({
+var StashedFileView = Backbone.View.extend({
 	tagName: "tr",
 
 	template: _.template($('#StashedFileView-template').html()),
@@ -61,15 +62,15 @@ StashedFileView = Backbone.View.extend({
 
 	toggleDistribute: function() {
 		var distributeSection = this.$('#distribute-section');
-		if (distributeSection.css('display') == 'none')
+		if (distributeSection.css('display') === 'none')
 			distributeSection.css('display', '');
 		else
 			distributeSection.css('display', 'none');
 	},
 	
-	distributeRequest: function(event) {
+	distributeRequest: function() {
 		_.each(this.$('input:checkbox'), function(targetObject) {
-			if (targetObject.value != 'selectAll' && targetObject.checked)
+			if (targetObject.value !== 'selectAll' && targetObject.checked)
 			{
 				var target_id = targetObject.value;
 				$.ajax({ url: this.stashedFile.url() + '/distribute/' + target_id,
@@ -106,12 +107,12 @@ var FileStashView = Backbone.View.extend({
     render: function() {
 		this.$el.empty();
 		this.fileStash.each(function(stashedFile) {
-			var stashedFileView = new StashedFileView(stashedFile, targets);
+			var stashedFileView = new StashedFileView(stashedFile, this.targets);
 			stashedFileView.render();
 			this.$el.append(stashedFileView.el);
 			}, this);
 		return this;
-	},
+	}
 });
 
 var targets = new Targets();
