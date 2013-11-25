@@ -1,18 +1,12 @@
 'use strict';
 
 var SendorTask = Backbone.Model.extend({
-	idAttribute: "task_id",
-
-	initialize: function() {
-	}
+	idAttribute: "task_id"
 });
 
 var SendorTasks = Backbone.Collection.extend({
 	model: SendorTask,
 	url: "../api/tasks",
-
-	initialize: function() {
-	},
 
 	parse: function(response) {
 		return response.collection;
