@@ -1,175 +1,46 @@
 
-import datetime
-import json
 import logging
-import logging.handlers
 import sys
-import os
 
-import flask.config
 from flask import Flask
-from flask import Blueprint, Response, redirect, url_for, render_template, request, jsonify
+from flask import redirect
 from werkzeug import secure_filename
 
-from SendorTask import SendorTask
-from SendorQueue import SendorQueue
-from FileStash import FileStash
-from Targets import Targets
+from FileDistribution.SendorQueue import SendorQueue
+from FileDistribution.FileStash import FileStash
+from FileDistribution.Targets import Targets
+
+import FileDistribution.api
+import ui
+import application_config
+import application_logger
 
 logger = logging.getLogger('main')
 
-g_sendor_queue = None
-
-g_file_stash = None
-g_targets = None
-
-g_config = {}
-
-class DistributeFileTask(SendorTask):
-
-	def __init__(self, source, target, stashed_file_id):
-		super(DistributeFileTask, self).__init__()
-		self.source = source
-		self.target = target
-		self.stashed_file = g_file_stash.lock(stashed_file_id)
-
-	def string_description(self):
-		return "Distribute file " + self.source + " to " + self.target
-
-	def completed(self):
-		super(DistributeFileTask, self).completed()
-		g_file_stash.unlock(self.stashed_file)
-
-	def failed(self):
-		super(DistributeFileTask, self).failed()
-		g_file_stash.unlock(self.stashed_file)
-	
-	def canceled(self):
-		super(DistributeFileTask, self).canceled()
-		g_file_stash.unlock(self.stashed_file)
-
-def create_ui(upload_folder):
-
-	ui_app = Blueprint('ui', __name__)
-
-	@ui_app.route('/')
-	@ui_app.route('/index.html', methods = ['GET'])
-	def index():
-	
-#		if request.args.get('cancel'):
-#			g_sendor_queue.cancel_current_job()
-	
-		return render_template('index.html')
-
-	@ui_app.route('/upload.html', methods = ['GET', 'POST'])
-	def upload():
-		if request.method == 'GET':
-			return Response(render_template('upload_form.html'))
-
-		elif request.method == 'POST':
-
-			file = request.files['file']
-			filename = secure_filename(file.filename)
-			upload_file_full_path = os.path.join(upload_folder, filename)
-			file.save(upload_file_full_path)
-
-			g_file_stash.add(upload_folder, filename, datetime.datetime.utcnow())
-
-			return redirect('index.html')
-
-	logger.info("Created ui")
-
-	return ui_app
-
-def create_api():
-
-	api_app = Blueprint('api', __name__)
-
-	@api_app.route('/tasks', methods = ['GET'])
-	def tasks():
-		tasks = g_sendor_queue.list()
-		tasks_progress = [task.progress() for task in tasks]
-		return jsonify(collection=tasks_progress)
-
-	@api_app.route('/targets', methods = ['GET'])
-	def targets():
-		targets = g_targets.get_targets()
-		targets_contents = [{ 'target_id' : target_id, 'name' : target_details['name'] } for (target_id, target_details) in targets.iteritems()]
-		return jsonify(collection=targets_contents)
-
-	@api_app.route('/file_stash', methods = ['GET'])
-	def file_stash():
-		sorted_file_stash = sorted(g_file_stash.list(), cmp = lambda x, y: cmp(x.timestamp, y.timestamp))
-		file_stash_contents = [file.to_json() for file in sorted_file_stash]
-		return jsonify(collection=file_stash_contents)
-		
-	@api_app.route('/file_stash/<file_id>/delete', methods = ['DELETE'])
-	def file_stash_delete(file_id):
-		g_file_stash.remove(file_id)
-		return ""
-	
-	@api_app.route('/file_stash/<file_id>/distribute/<target_id>', methods = ['POST'])
-	def file_stash_distribute(file_id, target_id):
-		stashed_file = g_file_stash.lock(file_id)
-
-		try:
-			distribute_file_task = DistributeFileTask(stashed_file.original_filename, target_id, file_id)
-			distribute_file_actions = g_targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, target_id)
-			distribute_file_task.actions.extend(distribute_file_actions)
-			g_sendor_queue.add(distribute_file_task)
-		finally:
-			g_file_stash.unlock(stashed_file)
-	
-		return ""
-
-	return api_app
-
-	
-def load_config(host_config_filename, targets_config_filename):
-	global g_config
-	with open(host_config_filename) as file:
-		g_config = json.load(file)
-	with open(targets_config_filename) as file:
-		g_config['targets'] = json.load(file)
-
-def initialize_logger(settings):
-	filename = 'activity.log'
-
-	if settings['output'] == 'file':
-		file_handler = logging.handlers.TimedRotatingFileHandler(
-			filename=os.path.join(settings['log_folder'], filename),
-			when='midnight',
-			utc=True)
-		formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-		file_handler.setFormatter(formatter)
-
-		root_logger = logging.getLogger()
-		root_logger.setLevel(logging.INFO)
-		root_logger.addHandler(file_handler)
-
 def main(host_config_filename, targets_config_filename):
-	global g_sendor_queue
-	global g_file_stash
-	global g_targets
 
-	load_config(host_config_filename, targets_config_filename)
+	config = application_config.load_config(host_config_filename, targets_config_filename)
 
-	initialize_logger(g_config['logging'])
+	application_logger.initialize_logger(config['logging'])
 	
-	host = g_config['host']
-	port = int(g_config['port'])
-	upload_folder = g_config['upload_folder']
-	file_stash_folder = g_config['file_stash_folder']
-	queue_folder = g_config['queue_folder']
-	num_distribution_processes = int(g_config['num_distribution_processes'])
+	host = config['host']
+	port = int(config['port'])
+	upload_folder = config['upload_folder']
+	file_stash_folder = config['file_stash_folder']
+	queue_folder = config['queue_folder']
+	num_distribution_processes = int(config['num_distribution_processes'])
 
 	root = Flask(__name__)
-	root.config['host_description'] = g_config['host_description']
+	root.config['host_description'] = config['host_description']
 	root.config['SEND_FILE_MAX_AGE_DEFAULT'] = 1
 
-	ui_app = create_ui(upload_folder)
+	sendor_queue = SendorQueue(num_distribution_processes, queue_folder)
+	file_stash = FileStash(file_stash_folder)
+	targets = Targets(config['targets'])
+
+	ui_app = ui.create_ui(file_stash, upload_folder)
 	root.register_blueprint(url_prefix = '/ui', blueprint = ui_app)
-	api_app = create_api()
+	api_app = FileDistribution.api.create_api(sendor_queue, targets, file_stash)
 	root.register_blueprint(url_prefix = '/api', blueprint = api_app)
 
 	@root.route('/')
@@ -177,12 +48,7 @@ def main(host_config_filename, targets_config_filename):
 	def index():
 		return redirect('ui')
 
-	g_sendor_queue = SendorQueue(num_distribution_processes, queue_folder)
-	g_file_stash = FileStash(file_stash_folder)
-	g_targets = Targets(g_config['targets'])
-
 	logger.info("Starting wsgi server")
-
 
 	root.run(host = host, port = port, debug = True)
 
