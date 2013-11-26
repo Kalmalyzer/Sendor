@@ -2,6 +2,10 @@
 import logging
 import sys
 
+import tornado.wsgi
+import tornado.web
+import tornado.ioloop
+
 from flask import Flask
 from flask import redirect
 from werkzeug import secure_filename
@@ -50,8 +54,14 @@ def main(host_config_filename, targets_config_filename):
 
 	logger.info("Starting wsgi server")
 
-	root.run(host = host, port = port, debug = True)
-
+	wsgi_root = tornado.wsgi.WSGIContainer(root)
+	
+	application = tornado.web.Application([
+		(r".*", tornado.web.FallbackHandler, dict(fallback=wsgi_root))
+	])	
+	
+	application.listen(port)
+	tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == '__main__':
 	
