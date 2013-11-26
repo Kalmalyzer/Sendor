@@ -58,6 +58,12 @@ class StashedFile(RefCount):
 
 class FileStash(object):
 
+	class FileDoesNotExistError(Exception):
+		pass
+
+	class FileCannotBeRemovedError(Exception):
+		pass
+
 	index_filename = 'index.json'
 
 	def __init__(self, root_path):
@@ -196,9 +202,11 @@ class FileStash(object):
 
 		with self.index_lock:
 			file = self.get(id)
+			if not file:
+				raise FileStash.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
 			full_path_filename = file.full_path_filename
 			if file.ref_count() != 0:
-				raise Exception("Attempted to remove stashed file with nonzero refcount")
+				raise FileStash.FileCannotBeRemovedError("File with id " + str(id) + " has nonzero refcount and cannot be removed")
 			else:
 				if self.remove_from_index(id):
 					os.remove(full_path_filename)
@@ -228,7 +236,7 @@ class FileStash(object):
 		with self.index_lock:
 			stashed_file = self.get(id)
 			if not stashed_file:
-				raise Exception("Attempted to lock stashed file which does not exist")
+				raise FileStash.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
 			else:
 				stashed_file.add_ref()
 				return stashed_file
@@ -334,8 +342,11 @@ class FileStashUnitTest(unittest.TestCase):
 
 		# Ensure that it is not possible to remove locked files
 		file_stash.lock(file4_id)
-		self.assertRaises(Exception, file_stash.remove, file4_id)
+		self.assertRaises(FileStash.FileCannotBeRemovedError, file_stash.remove, file4_id)
 		file_stash.unlock(file4)
+
+		# Removing a nonexistent file should result in an error
+		self.assertRaises(FileStash.FileDoesNotExistError, file_stash.remove, 12345678)
 		
 		# Remove one file which has identical name to another file 
 		file_stash.remove(file4_id)

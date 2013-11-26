@@ -56,7 +56,7 @@ var StashedFileView = Backbone.View.extend({
 	},
 	
 	deleteRequest: function() {
-		$.ajax({ url: this.stashedFile.url() + '/delete',
+		$.ajax({ url: this.stashedFile.url(),
 			type: 'DELETE' });
 	},
 

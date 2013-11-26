@@ -1,9 +1,17 @@
 
+import json
 import logging
+import os
+import shutil
+import unittest
 
-from flask import Blueprint, Response, jsonify
+from flask import Flask, Blueprint, Response, jsonify
 
 from SendorTask import SendorTask
+
+from SendorQueue import SendorQueue
+from Targets import Targets
+from FileStash import FileStash
 
 logger = logging.getLogger('main.api')
 
@@ -53,23 +61,98 @@ def create_api(sendor_queue, targets, file_stash):
 		file_stash_contents = [file.to_json() for file in sorted_file_stash]
 		return jsonify(collection=file_stash_contents)
 
-	@api_app.route('/file_stash/<file_id>/delete', methods = ['DELETE'])
+	@api_app.route('/file_stash/<file_id>', methods = ['DELETE'])
 	def file_stash_delete(file_id):
-		file_stash.remove(file_id)
-		return ""
+		try:
+			file_stash.remove(file_id)
+			return jsonify({})
+		except FileStash.FileDoesNotExistError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 404
+			return response
+		except FileStash.FileCannotBeRemovedError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 403
+			return response
 	
 	@api_app.route('/file_stash/<file_id>/distribute/<target_id>', methods = ['POST'])
 	def file_stash_distribute(file_id, target_id):
-		stashed_file = file_stash.lock(file_id)
+		try:
+			stashed_file = file_stash.lock(file_id)
+		except FileStash.FileDoesNotExistError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 404
+			return response
 
 		try:
 			distribute_file_task = DistributeFileTask(file_stash, stashed_file.original_filename, target_id, file_id)
 			distribute_file_actions = targets.create_distribution_actions(stashed_file.full_path_filename, stashed_file.original_filename, stashed_file.physical_file.sha1sum, stashed_file.size, target_id)
 			distribute_file_task.actions.extend(distribute_file_actions)
 			sendor_queue.add(distribute_file_task)
-		finally:
+		except:
 			file_stash.unlock(stashed_file)
-	
-		return ""
+			raise
+
+		file_stash.unlock(stashed_file)
+		return jsonify({})
 
 	return api_app
+
+class ApiTestCase(unittest.TestCase):
+
+	work_directory = 'unittest'
+
+	def setUp(self):
+	
+		os.mkdir(self.work_directory)
+
+		self.sendor_queue = SendorQueue(4, self.work_directory)
+		with open('test/local_machine_targets.json') as file:
+			targets = json.load(file)
+			self.targets = Targets(targets)
+
+		os.mkdir('unittest/file_stash')
+		self.file_stash = FileStash('unittest/file_stash')
+		
+		root = Flask(__name__)
+		root.register_blueprint(url_prefix='/api', blueprint=create_api(self.sendor_queue, self.targets, self.file_stash))
+		self.app = root.test_client()
+	
+	def test_file_stash(self):
+
+		# Querying an empty file stash should return a file stash with a 'collection' element referencing an empty collection
+		raw_response = self.app.get('/api/file_stash')
+		response = json.loads(raw_response.data)
+		self.assertIn('collection', response)
+		self.assertEquals(len(response['collection']), 0)
+	
+		# Deleting a nonexistent file should result in "file not found"
+		raw_response = self.app.delete('/api/file_stash/0')
+		self.assertEquals(raw_response.status_code, 404)
+		
+		# Attempting to distribute a nonexistent file should result in a "file not found"
+		raw_response = self.app.post('/api/file_stash/0/distribute/0')
+		self.assertEquals(raw_response.status_code, 404)
+		
+	def test_tasks(self):
+
+		# Querying an empty queue should return a response with a 'collection' element referencing an empty collection
+		raw_response = self.app.get('/api/tasks')
+		response = json.loads(raw_response.data)
+		self.assertIn('collection', response)
+		self.assertEquals(len(response['collection']), 0)
+		
+	def test_targets(self):
+
+		# Querying a non-empty set of targets should return a response with a 'collection' element referencing a non-collection of targets
+		raw_response = self.app.get('/api/targets')
+		response = json.loads(raw_response.data)
+		self.assertIn('collection', response)
+		self.assertNotEquals(len(response['collection']), 0)
+		
+	def tearDown(self):
+		shutil.rmtree(self.work_directory)
+		pass
+
+if __name__ == '__main__':
+	unittest.main()
