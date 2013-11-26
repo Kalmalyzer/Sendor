@@ -32,10 +32,10 @@ var StashedFileView = Backbone.View.extend({
 	template: _.template($('#StashedFileView-template').html()),
 
 	events: {
-		"click #delete": "deleteRequest",
-		"click #distribute": "toggleDistribute",
-		"click #distribute-submit": "distributeRequest",
-		"click #toggle-all-targets": "toggleAllTargets"
+		"click .delete-button": "deleteRequest",
+		"click .distribute-display-button": "toggleDistribute",
+		"click .distribute-submit-button": "distributeRequest",
+		"click .toggle-all-targets-button": "toggleAllTargets"
 	},	
 	
 	initialize: function(stashedFile, targets) {
@@ -61,7 +61,7 @@ var StashedFileView = Backbone.View.extend({
 	},
 
 	toggleDistribute: function() {
-		var distributeSection = this.$('#distribute-section');
+		var distributeSection = this.$('.distribute-section');
 		if (distributeSection.css('display') === 'none')
 			distributeSection.css('display', '');
 		else
@@ -79,7 +79,7 @@ var StashedFileView = Backbone.View.extend({
 		}, this);
 
 		// Disable the "Distribute!" button for 3 seconds
-		var submitButton = this.$('#distribute-submit');
+		var submitButton = this.$('.distribute-submit-button');
 		submitButton.prop('disabled', true);
 		window.setTimeout(function() {
 				submitButton.prop('disabled', false);
@@ -87,7 +87,7 @@ var StashedFileView = Backbone.View.extend({
 	},
 	
 	toggleAllTargets: function() {
-		var checkAllTargets = $('#toggle-all-targets').prop('checked');
+		var checkAllTargets = $('.toggle-all-targets-button').prop('checked');
 		var checkBoxes = $('input:checkbox');
 		checkBoxes.prop('checked', checkAllTargets);
 	}

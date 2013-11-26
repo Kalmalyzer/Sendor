@@ -1,12 +1,12 @@
 <script id="StashedFileView-template" type="text/template">
 	<td>
-		<button id="distribute" type="button" class="btn btn-default">Distribute</button>
+		<button type="button" class="btn btn-default distribute-display-button">Distribute</button>
 
 		<% if (stashed_file.is_deletable) { %>
-			<button id="delete" type="button" class="btn btn-default">Delete</button>
+			<button type="button" class="btn btn-default delete-button">Delete</button>
 		<% } %>
 
-		<div id="distribute-section" style="display:none">
+		<div class="distribute-section" style="display:none">
 			<br>
 			<legend>Choose targets</legend>
 
@@ -17,10 +17,10 @@
 			<% }); %>
 			<br>
 			<label class="checkbox">
-				<input id="toggle-all-targets" type="checkbox" value="selectAll" checked>Select/Deselect All
+				<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
 			</label>
 			<br>
-			<button id="distribute-submit" type="button" class="btn btn-default">Distribute!</button>
+			<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
 		</div>
 	</td>
 	<td>
