@@ -11,6 +11,8 @@ import unittest
 
 from fabric.api import local
 
+from Observable import Observable
+
 class RefCount(object):
 
 	def __init__(self):
@@ -56,7 +58,7 @@ class StashedFile(RefCount):
 			'size' : str(self.size),
 			'is_deletable' : self.ref_count() == 0 }
 
-class FileStash(object):
+class FileStash(Observable):
 
 	class FileDoesNotExistError(Exception):
 		pass
@@ -67,6 +69,7 @@ class FileStash(object):
 	index_filename = 'index.json'
 
 	def __init__(self, root_path):
+		super(FileStash, self).__init__()
 		if not os.path.exists(root_path):
 			raise Exception("Stash directory " + root_path + " does not exist")
 
@@ -151,6 +154,7 @@ class FileStash(object):
 		physical_file = add_physical_file(self, sha1sum)
 		stashed_file = add_stashed_file(self, filename, physical_file, timestamp, size)
 
+		self.notify(event_type='add', stashed_file=stashed_file)
 		return stashed_file
 
 	def remove_from_index(self, id):
@@ -161,15 +165,17 @@ class FileStash(object):
 		def remove_stashed_file(self, id):
 			del self.stashed_files[id]
 			
-		def remove_physical_file(self, physical_file):
+		def deref_physical_file(self, physical_file):
 			return physical_file.rem_ref()
 
-		if not id in self.stashed_files:
+		stashed_file = self.stashed_files.get(id)
+		if not stashed_file:
 			raise Exception("File not in stash")
 		else:
-			physical_file = self.stashed_files[id].physical_file
+			physical_file = stashed_file.physical_file
 			remove_stashed_file(self, id)
-			return remove_physical_file(self, physical_file) == 0
+			self.notify(event_type='remove', stashed_file=stashed_file)
+			return deref_physical_file(self, physical_file) == 0
 
 	def add(self, original_path, filename, timestamp):
 		""" Add a file to the stash
@@ -239,6 +245,7 @@ class FileStash(object):
 				raise FileStash.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
 			else:
 				stashed_file.add_ref()
+				self.notify(event_type='change', stashed_file=stashed_file)
 				return stashed_file
 
 	def unlock(self, stashed_file):
@@ -247,6 +254,7 @@ class FileStash(object):
 			when all lock() calls on it have been matched with unlock() calls """
 		with self.index_lock:
 			stashed_file.rem_ref()
+			self.notify(event_type='change', stashed_file=stashed_file)
 	
 
 class StashedFileUnitTest(unittest.TestCase):
@@ -286,6 +294,9 @@ class FileStashUnitTest(unittest.TestCase):
 
 	def test(self):
 
+		def notification(event_type, stashed_file):
+			print event_type + " " + str(stashed_file.file_id)
+
 		# Add two files to initial stash
 		file_stash_init = FileStash('unittest/file_stash')
 		local('echo "Hello World 1" > unittest/' + self.file1_name)
@@ -296,6 +307,7 @@ class FileStashUnitTest(unittest.TestCase):
 		
 		# Create main stash
 		file_stash = FileStash('unittest/file_stash')
+		file_stash.subscribe(notification)
 		# file1 and file2 should already exist in the file stash
 		self.assertEquals(len(file_stash.stashed_files), 2)
 

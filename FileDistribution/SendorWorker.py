@@ -11,6 +11,8 @@ import unittest
 
 from SendorTask import SendorTask, SendorAction, SendorActionContext
 
+from Observable import Observable
+
 logger = logging.getLogger('SendorWorker')
 
 class SendorWorkerTaskArgs(object):
@@ -67,8 +69,9 @@ class SendorWorkerActionContext(SendorActionContext):
 	def log(self, log):
 		self.worker_task.enqueue_log(log)
 
-class SendorWorkerTask(object):
+class SendorWorkerTask(Observable):
 	def __init__(self, queue, cancel, args):
+		super(SendorWorkerTask, self).__init__()
 		self.queue = queue
 		self.cancel = cancel
 		self.args = args
@@ -118,11 +121,12 @@ def initialize_sendor_worker_process(queue, cancel):
 	start_sendor_worker_task.cancel = cancel
 	
 
-class SendorWorker(object):
+class SendorWorker(Observable):
 
 	unique_id = 0
 
 	def __init__(self, num_processes):
+		super(SendorWorker, self).__init__()
 		self.num_processes = num_processes
 		self.cancel = multiprocessing.Event()
 		self.queue = multiprocessing.queues.SimpleQueue()
@@ -178,10 +182,13 @@ class SendorWorker(object):
 		else:
 			raise Exception("Unknown type: " + item.item_type)
 
+		self.notify(event_type='change', task=task)
+
 #	def cancel_current_job(self):
 #		self.cancel.set()
 
 	def add(self, task):
+		self.notify(event_type='add', task=task)
 		task_in_flight_id = self.unique_id
 		task_args = SendorWorkerTaskArgs(task_in_flight_id=task_in_flight_id, work_directory=task.work_directory, actions=task.actions)
 		with self.tasks_in_flight_lock:
@@ -191,6 +198,8 @@ class SendorWorker(object):
 
 	def remove(self, task_in_flight_id):
 		with self.tasks_in_flight_lock:
+			task = self.tasks_in_flight.get(task_in_flight_id)
+			self.notify(event_type='remove', task=task)
 			del self.tasks_in_flight[task_in_flight_id]
 		
 	def join(self, task):

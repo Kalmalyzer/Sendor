@@ -81,7 +81,12 @@ class SendorQueueUnitTest(unittest.TestCase):
 				super(InstrumentedSendorTask, self).completed()
 				state.unittest.assertEquals(state.state, STARTED_TASK)
 				state.state = COMPLETED_TASK
+
+		def notification(event_type, task):
+			print event_type + " " + str(task.task_id)
 		
+		self.sendor_queue.worker.subscribe(notification)
+				
 		task = InstrumentedSendorTask()
 		self.sendor_queue.add(task)
 		self.sendor_queue.wait()
