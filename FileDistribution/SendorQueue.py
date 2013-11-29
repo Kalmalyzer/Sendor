@@ -12,13 +12,16 @@ from flask import render_template
 from SendorWorker import SendorWorker
 from SendorTask import SendorTask
 
+from Observable import Observable
+
 logger = logging.getLogger('SendorQueue')
 
-class SendorQueue(object):
+class SendorQueue(Observable):
 
 	unique_id = 0
 
 	def __init__(self, num_processes, work_directory):
+		super(SendorQueue, self).__init__()
 		self.work_directory = work_directory
 		self.tasks_work_directory = os.path.join(self.work_directory, 'active_tasks')
 		shutil.rmtree(self.tasks_work_directory, ignore_errors=True)
@@ -26,6 +29,12 @@ class SendorQueue(object):
 		self.tasks_lock = threading.RLock()
 		self.tasks = []
 		self.worker = SendorWorker(num_processes)
+		
+		def notifier(**kwargs):
+			if kwargs['event_type'] == 'change':
+				self.notify(**kwargs)
+		
+		self.worker.subscribe(notifier)
 
 	def add(self, task):
 		task_id = self.unique_id
@@ -34,6 +43,7 @@ class SendorQueue(object):
 		with self.tasks_lock:
 			task.set_queue_info(task_id, task_work_directory)
 			self.tasks.append(task)
+			self.notify(event_type='add', task=task)
 		self.worker.add(task)
 
 	def list(self):
