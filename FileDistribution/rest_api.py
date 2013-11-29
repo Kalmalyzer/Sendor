@@ -39,7 +39,7 @@ class DistributeFileTask(SendorTask):
 		super(DistributeFileTask, self).canceled()
 		self.file_stash.unlock(self.stashed_file)
 
-def create_api(sendor_queue, targets, file_stash):
+def create_rest_api(sendor_queue, targets, file_stash):
 
 	api_app = Blueprint('api', __name__)
 

@@ -4,13 +4,9 @@ var SendorTask = Backbone.Model.extend({
 	idAttribute: "task_id"
 });
 
-var SendorTasks = Backbone.Collection.extend({
+var SendorTasks = Backsync.Collection.extend({
 	model: SendorTask,
-	url: "../api/tasks",
-
-	parse: function(response) {
-		return response.collection;
-	}
+	url: "/api/tasks"
 });
 
 var SendorTaskView = Backbone.View.extend({
@@ -59,4 +55,4 @@ tasks.fetch({reset: true});
 
 $('#tasks').html(tasksView.el);
 
-window.setInterval(function(){ tasks.fetch(); }, 10000);
+//window.setInterval(function(){ tasks.fetch(); }, 10000);

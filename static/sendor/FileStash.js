@@ -4,26 +4,18 @@ var Target = Backbone.Model.extend({
 	idAttribute: "target_id"
 });
 
-var Targets = Backbone.Collection.extend({
+var Targets = Backsync.Collection.extend({
 	model: Target,
-	url: "../api/targets",
-
-	parse: function(response) {
-		return response.collection;
-	}
+	url: "/api/targets"
 });
 
 var StashedFile = Backbone.Model.extend({
 	idAttribute: "file_id"
 });
 
-var FileStash = Backbone.Collection.extend({
+var FileStash = Backsync.Collection.extend({
 	model: StashedFile,
-	url: "../api/file_stash",
-
-	parse: function(response) {
-		return response.collection;
-	}
+	url: "/api/file_stash"
 });
 
 var StashedFileView = Backbone.View.extend({
@@ -117,11 +109,11 @@ var FileStashView = Backbone.View.extend({
 
 var targets = new Targets();
 targets.fetch({reset: true});
-window.setInterval(function(){ targets.fetch(); }, 10000);
+//window.setInterval(function(){ targets.fetch(); }, 10000);
 
 var fileStash = new FileStash();
 fileStash.fetch({reset: true});
-window.setInterval(function(){ fileStash.fetch(); }, 10000);
+//window.setInterval(function(){ fileStash.fetch(); }, 10000);
 
 var fileStashView = new FileStashView(fileStash, targets);
 $('#file_stash').html(fileStashView.el);
