@@ -7,6 +7,7 @@
 	"file_stash_folder" : "test/file_stash",
 	"queue_folder" : "test/queue",
 	"num_distribution_processes" : "4",
+	"max_file_days" : "7",
 	
 	"logging" : {
 		"output" : "stdout",

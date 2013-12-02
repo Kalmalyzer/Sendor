@@ -6,7 +6,9 @@ import json
 import os
 import os.path
 import shutil
+import thread
 import threading
+import time
 import unittest
 
 from fabric.api import local
@@ -58,6 +60,21 @@ class StashedFile(RefCount):
 			'size' : str(self.size),
 			'is_deletable' : self.ref_count() == 0 }
 
+def remove_old_files_thread(file_stash, check_interval_seconds, max_age_ays):
+
+	while True:
+		time.sleep(check_interval_seconds)
+		files = file_stash.list()
+		now = datetime.datetime.utcnow()
+		max_timedelta = datetime.timedelta(days=max_age_days)
+		for file in files:
+			age = now - file.timestamp
+			if age > max_timedelta:
+				try:
+					stashed_file = file_stash.remove(file.file_id)
+				except:
+					pass
+
 class FileStash(Observable):
 
 	class FileDoesNotExistError(Exception):
@@ -68,7 +85,7 @@ class FileStash(Observable):
 
 	index_filename = 'index.json'
 
-	def __init__(self, root_path):
+	def __init__(self, root_path, file_max_days):
 		super(FileStash, self).__init__()
 		if not os.path.exists(root_path):
 			raise Exception("Stash directory " + root_path + " does not exist")
@@ -77,7 +94,10 @@ class FileStash(Observable):
 		self.root_path = root_path
 		self.unique_id = 0
 		self.build_index()
-
+		
+		if file_max_days:
+			thread.start_new_thread(remove_old_files_thread, (self, 3600, file_max_days))
+		
 	def save_index(self):
 		with self.index_lock:
 			filename = os.path.join(self.root_path, self.index_filename)
@@ -298,7 +318,7 @@ class FileStashUnitTest(unittest.TestCase):
 			print event_type + " " + str(stashed_file.file_id)
 
 		# Add two files to initial stash
-		file_stash_init = FileStash('unittest/file_stash')
+		file_stash_init = FileStash('unittest/file_stash', None)
 		local('echo "Hello World 1" > unittest/' + self.file1_name)
 		local('echo "Hello World 2" > unittest/' + self.file2_name)
 		file_stash_init.add('unittest', self.file1_name, datetime.datetime.utcnow())
@@ -306,7 +326,7 @@ class FileStashUnitTest(unittest.TestCase):
 		# Initial stash will no longer be used from now on
 		
 		# Create main stash
-		file_stash = FileStash('unittest/file_stash')
+		file_stash = FileStash('unittest/file_stash', None)
 		file_stash.subscribe(notification)
 		# file1 and file2 should already exist in the file stash
 		self.assertEquals(len(file_stash.stashed_files), 2)
