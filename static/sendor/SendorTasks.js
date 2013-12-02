@@ -42,7 +42,7 @@ var SendorTasksView = Backbone.View.extend({
 		this.collection.each(function(task) {
 				var taskView = new SendorTaskView({model: task});
 				taskView.render();
-				this.$el.append(taskView.el);
+				this.$el.prepend(taskView.el);
 			}, this);
 		return this;
 	}
