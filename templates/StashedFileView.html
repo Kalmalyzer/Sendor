@@ -4,6 +4,8 @@
 
 		<% if (stashed_file.is_deletable) { %>
 			<button type="button" class="btn btn-default delete-button">Delete</button>
+		<% } else { %>
+			<button type="button" disabled="disabled" class="btn btn-default delete-button">Locked</button>
 		<% } %>
 
 		<div class="distribute-section" style="display:none">
