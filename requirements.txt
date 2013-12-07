@@ -2,3 +2,4 @@ flask==0.10.1
 fabric==1.8
 python-dateutil==1.5
 tornado==2.1
+sockjs-tornado=1.0.0
