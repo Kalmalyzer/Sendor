@@ -43,6 +43,7 @@ class SendorTask(object):
 		self.completion_ratio = 0
 		self.activity = ""
 		self.log = ""
+		self.is_cancelable = False
 
 	def set_queue_info(self, task_id, work_directory):
 		self.task_id = task_id
@@ -98,7 +99,7 @@ class SendorTask(object):
 		return self.completion_ratio
 		
 	def append_log(self, log):
-		self.log = self.log + log
+		self.log = self.log + log + "\n"
 
 	def get_log(self):
 		return self.log
@@ -123,6 +124,7 @@ class SendorTask(object):
 			'state' : self.string_state(),
 			'activity' : self.get_activity(),
 			'completion_ratio' : self.get_completion_ratio(),
+			'is_cancelable' : self.is_cancelable,
 			'log' : self.get_log() }
 			
 		return status

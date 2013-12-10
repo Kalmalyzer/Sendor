@@ -49,6 +49,34 @@ def create_rest_api(sendor_queue, targets, file_stash):
 		tasks_progress = [task.progress() for task in tasks]
 		return jsonify(collection=tasks_progress)
 
+	@api_app.route('/tasks/<int:task_id>', methods = ['GET'])
+	def task_get(task_id):
+		try:
+			task = sendor_queue.get(task_id)
+			task_progress = task.progress()
+			return jsonify(collection=task_progress)
+		except SendorQueue.TaskNotFoundError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 404
+			return response
+		except Exception, e:
+			print e.message
+
+	@api_app.route('/tasks/<int:task_id>/cancel', methods = ['PUT'])
+	def task_cancel(task_id):
+		try:
+			task = sendor_queue.get(task_id)
+			sendor_queue.cancel(task)
+			return jsonify({})
+		except SendorQueue.TaskNotFoundError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 404
+			return response
+		except SendorQueue.TaskHasCompletedError, e:
+			response = jsonify({'message' : e.message})
+			response.status_code = 403
+			return response
+
 	@api_app.route('/targets', methods = ['GET'])
 	def targets_get():
 		target_list = targets.get_targets()
@@ -106,7 +134,7 @@ class ApiTestCase(unittest.TestCase):
 	
 		os.mkdir(self.work_directory)
 
-		self.sendor_queue = SendorQueue(4, self.work_directory)
+		self.sendor_queue = SendorQueue(num_processes=4, work_directory=self.work_directory, max_task_execution_time=10, max_task_finalization_time=1)
 		with open('test/local_machine_targets.json') as file:
 			targets = json.load(file)
 			self.targets = Targets(targets)
@@ -141,6 +169,16 @@ class ApiTestCase(unittest.TestCase):
 		response = json.loads(raw_response.data)
 		self.assertIn('collection', response)
 		self.assertEquals(len(response['collection']), 0)
+
+		# Querying a nonexistent task should result in a "task not found"
+		raw_response = self.app.get('/api/tasks/0')
+		response = json.loads(raw_response.data)
+		self.assertEquals(raw_response.status_code, 404)
+		
+		# Attempting to cancel a nonexistent task should result in a "task not found"
+		raw_response = self.app.put('/api/tasks/0/cancel')
+		response = json.loads(raw_response.data)
+		self.assertEquals(raw_response.status_code, 404)
 		
 	def test_targets(self):
 

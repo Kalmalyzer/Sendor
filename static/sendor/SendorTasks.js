@@ -14,6 +14,10 @@ var SendorTaskView = Backbone.View.extend({
 
 	template: _.template($('#SendorTaskView-template').html()),
 	
+	events: {
+		"click .cancel-button": "cancelRequest"
+	},
+
 	initialize: function() {
 		this.listenTo(this.model, "change", this.change);
 	 },
@@ -26,6 +30,11 @@ var SendorTaskView = Backbone.View.extend({
 	change: function() {
 		this.$el.html(this.template(this.model.toJSON()));
 		return this;
+	},
+
+	cancelRequest: function() {
+		$.ajax({ url: this.model.url() + '/cancel',
+			type: 'PUT' });
 	}
 });
 

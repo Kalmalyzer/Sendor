@@ -39,12 +39,14 @@ def main(host_config_filename, targets_config_filename):
 	queue_folder = config['queue_folder']
 	num_distribution_processes = int(config['num_distribution_processes'])
 	file_max_days = int(config['max_file_days'])
+	max_task_execution_time_seconds = int(config['max_task_execution_time_seconds'])
+	max_task_finalization_time_seconds = int(config['max_task_finalization_time_seconds'])
 
 	root = Flask(__name__)
 	root.config['host_description'] = config['host_description']
 	root.config['SEND_FILE_MAX_AGE_DEFAULT'] = 1
 
-	sendor_queue = SendorQueue(num_distribution_processes, queue_folder)
+	sendor_queue = SendorQueue(num_distribution_processes, queue_folder, max_task_execution_time_seconds, max_task_finalization_time_seconds)
 	file_stash = FileStash(file_stash_folder, file_max_days)
 	targets = Targets(config['targets'])
 

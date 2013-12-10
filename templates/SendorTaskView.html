@@ -1,6 +1,10 @@
 <script id="SendorTaskView-template" type="text/template">
 	<% var completion_percentage = Math.round(100 * completion_ratio) %>
 	<td>
+		<% if (is_cancelable) { cancel_button_disabled_attribute = ''; } else { cancel_button_disabled_attribute = 'disabled="disabled"'; } %>
+		<button type="button" <%- cancel_button_disabled_attribute %> class="btn btn-primary cancel-button">Cancel</button>
+	</td>
+	<td>
 		<% if (duration) { %>
 			<%- description %>: <%- duration %>: <%- activity %>
 		<% } else { %>
@@ -33,7 +37,7 @@
 		<% } else if (state == 'failed') { %>
 			<button type="button" disabled="disabled" class="btn btn-danger">Failed</button>	
 		<% } else if (state == 'canceled') { %>
-			<button type="button" disabled="disabled" class="btn btn-inverse">Canceled</button>	
+			<button type="button" disabled="disabled" class="btn btn-info">Canceled</button>	
 		<% } else { %>
 			Error: Unknown state!
 		<% } %>
