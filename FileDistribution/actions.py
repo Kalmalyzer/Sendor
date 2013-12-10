@@ -27,11 +27,6 @@ class FabricAction(SendorAction):
 		with fabric.api.settings(warn_only=True):
 			result = local(command, capture=True)
 
-			logger = logging.getLogger('fabric')
-			logger.info(command)
-			logger.info(result)
-			logger.info(result.stderr)
-
 			if result.failed:
 				raise Exception("Fabric command failed")
 			return result
@@ -39,11 +34,6 @@ class FabricAction(SendorAction):
 	def fabric_remote(self, command):
 		with fabric.api.settings(warn_only=True):
 			result = run(command)
-
-			logger = logging.getLogger('fabric')
-			logger.info(command)
-			logger.info(result)
-			logger.info(result.stderr)
 
 			if result.failed:
 				raise Exception("Fabric command failed")
