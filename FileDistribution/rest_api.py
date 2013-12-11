@@ -134,7 +134,7 @@ class ApiTestCase(unittest.TestCase):
 	
 		os.mkdir(self.work_directory)
 
-		self.sendor_queue = SendorQueue(num_processes=4, work_directory=self.work_directory, max_task_execution_time=10, max_task_finalization_time=1)
+		self.sendor_queue = SendorQueue(num_processes=4, work_directory=self.work_directory, max_task_execution_time=10, max_task_finalization_time=1, task_cleanup_interval_seconds=None, max_task_wait_seconds=None, max_task_exist_days=None)
 		with open('test/local_machine_targets.json') as file:
 			targets = json.load(file)
 			self.targets = Targets(targets)
