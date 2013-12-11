@@ -3,17 +3,21 @@ import datetime
 import dateutil
 import dateutil.parser
 import json
+import logging
 import os
 import os.path
 import shutil
 import thread
 import threading
+import traceback
 import time
 import unittest
 
 from fabric.api import local
 
 from Observable import Observable
+
+logger = logging.getLogger('FileStash')
 
 class RefCount(object):
 
@@ -60,32 +64,20 @@ class StashedFile(RefCount):
 			'size' : str(self.size),
 			'is_deletable' : self.ref_count() == 0 }
 
-def remove_old_files_thread(file_stash, check_interval_seconds, max_age_ays):
-
-	while True:
-		time.sleep(check_interval_seconds)
-		files = file_stash.list()
-		now = datetime.datetime.utcnow()
-		max_timedelta = datetime.timedelta(days=max_age_days)
-		for file in files:
-			age = now - file.timestamp
-			if age > max_timedelta:
-				try:
-					stashed_file = file_stash.remove(file.file_id)
-				except:
-					pass
-
 class FileStash(Observable):
 
-	class FileDoesNotExistError(Exception):
+	class Error(Exception):
 		pass
 
-	class FileCannotBeRemovedError(Exception):
+	class FileDoesNotExistError(Error):
+		pass
+
+	class FileCannotBeRemovedError(Error):
 		pass
 
 	index_filename = 'index.json'
 
-	def __init__(self, root_path, file_max_days):
+	def __init__(self, root_path, max_file_age_days, max_file_age_check_interval_seconds):
 		super(FileStash, self).__init__()
 		if not os.path.exists(root_path):
 			raise Exception("Stash directory " + root_path + " does not exist")
@@ -95,9 +87,27 @@ class FileStash(Observable):
 		self.unique_id = 0
 		self.build_index()
 		
-		if file_max_days:
-			thread.start_new_thread(remove_old_files_thread, (self, 3600, file_max_days))
+		if max_file_age_days:
+			cleanup_thread = threading.Thread(target=(lambda self, max_file_age_days, max_file_age_check_interval_seconds: self.remove_old_files_thread(max_file_age_days, max_file_age_check_interval_seconds)), args=(self, max_file_age_days, max_file_age_check_interval_seconds))
+			cleanup_thread.daemon = True
+			cleanup_thread.start()
 		
+	def remove_old_files_thread(self, max_file_age_days, max_file_age_check_interval_seconds):
+
+		while True:
+			time.sleep(max_file_age_check_interval_seconds)
+			files = self.list()
+			now = datetime.datetime.utcnow()
+			max_timedelta = datetime.timedelta(days=max_file_age_days)
+			for file in files:
+				age = now - file.timestamp
+				if age > max_timedelta:
+					try:
+						stashed_file = self.remove(file.file_id)
+					except Exception, e:
+						logger.error("Exception: " + e.message)
+						logger.error(traceback.format_exc())
+
 	def save_index(self):
 		with self.index_lock:
 			filename = os.path.join(self.root_path, self.index_filename)
@@ -229,10 +239,10 @@ class FileStash(Observable):
 		with self.index_lock:
 			file = self.get(id)
 			if not file:
-				raise FileStash.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
+				raise self.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
 			full_path_filename = file.full_path_filename
 			if file.ref_count() != 0:
-				raise FileStash.FileCannotBeRemovedError("File with id " + str(id) + " has nonzero refcount and cannot be removed")
+				raise self.FileCannotBeRemovedError("File with id " + str(id) + " has nonzero refcount and cannot be removed")
 			else:
 				if self.remove_from_index(id):
 					os.remove(full_path_filename)
@@ -245,7 +255,7 @@ class FileStash(Observable):
 			for id in ids:
 				try:
 					self.remove(id)
-				except:
+				except self.Error:
 					pass
 	
 	def list(self):
@@ -262,7 +272,7 @@ class FileStash(Observable):
 		with self.index_lock:
 			stashed_file = self.get(id)
 			if not stashed_file:
-				raise FileStash.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
+				raise self.FileDoesNotExistError("File with id " + str(id) + " does not exist in file stash")
 			else:
 				stashed_file.add_ref()
 				self.notify(event_type='change', stashed_file=stashed_file)
@@ -318,7 +328,7 @@ class FileStashUnitTest(unittest.TestCase):
 			print event_type + " " + str(stashed_file.file_id)
 
 		# Add two files to initial stash
-		file_stash_init = FileStash('unittest/file_stash', None)
+		file_stash_init = FileStash('unittest/file_stash', None, None)
 		local('echo "Hello World 1" > unittest/' + self.file1_name)
 		local('echo "Hello World 2" > unittest/' + self.file2_name)
 		file_stash_init.add('unittest', self.file1_name, datetime.datetime.utcnow())
@@ -326,7 +336,7 @@ class FileStashUnitTest(unittest.TestCase):
 		# Initial stash will no longer be used from now on
 		
 		# Create main stash
-		file_stash = FileStash('unittest/file_stash', None)
+		file_stash = FileStash('unittest/file_stash', None, None)
 		file_stash.subscribe(notification)
 		# file1 and file2 should already exist in the file stash
 		self.assertEquals(len(file_stash.stashed_files), 2)

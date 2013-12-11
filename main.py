@@ -38,7 +38,8 @@ def main(host_config_filename, targets_config_filename):
 	file_stash_folder = config['file_stash_folder']
 	queue_folder = config['queue_folder']
 	num_distribution_processes = int(config['num_distribution_processes'])
-	file_max_days = int(config['max_file_days'])
+	max_file_age_days = int(config['max_file_age_days'])
+	max_file_age_check_interval_seconds = int(config['max_file_age_check_interval_seconds'])
 	max_task_execution_time_seconds = int(config['max_task_execution_time_seconds'])
 	max_task_finalization_time_seconds = int(config['max_task_finalization_time_seconds'])
 
@@ -47,7 +48,7 @@ def main(host_config_filename, targets_config_filename):
 	root.config['SEND_FILE_MAX_AGE_DEFAULT'] = 1
 
 	sendor_queue = SendorQueue(num_distribution_processes, queue_folder, max_task_execution_time_seconds, max_task_finalization_time_seconds)
-	file_stash = FileStash(file_stash_folder, file_max_days)
+	file_stash = FileStash(file_stash_folder, max_file_age_days, max_file_age_check_interval_seconds)
 	targets = Targets(config['targets'])
 
 	ui_app = ui.create_ui(file_stash, upload_folder)

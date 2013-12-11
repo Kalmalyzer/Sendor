@@ -7,7 +7,8 @@
 	"file_stash_folder" : "test/file_stash",
 	"queue_folder" : "test/queue",
 	"num_distribution_processes" : "4",
-	"max_file_days" : "7",
+	"max_file_age_days" : "7",
+	"max_file_age_check_interval_seconds" : "3600",
 	"max_task_execution_time_seconds" : "60",
 	"max_task_finalization_time_seconds" : "1",
 	
