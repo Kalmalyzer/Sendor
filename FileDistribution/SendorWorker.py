@@ -230,8 +230,6 @@ class SendorWorker(Observable):
 
 		with self.tasks_in_flight_lock:
 			del self.tasks_in_flight[task_id]
-	
-		task_in_flight.task_done.set()
 
 	def worker_process_result_thread(self):
 		while True:
@@ -289,6 +287,7 @@ class SendorWorker(Observable):
 
 		if item.item_type == 'task_done':
 			self.notify(event_type='remove', task=task)
+			task_in_flight.task_done.set()
 		else:
 			self.notify(event_type='change', task=task)
 
@@ -310,7 +309,7 @@ class SendorTaskProcessUnitTest(unittest.TestCase):
 		for i in range(5):
 			task = SendorTask()
 			task.actions = [DummySendorAction()]
-			task.set_queue_info(i, 'unittest/' + str(i))
+			task.enqueued(i, 'unittest/' + str(i))
 			tasks.append(task)
 
 		worker = SendorWorker(max_task_execution_time=10, max_task_finalization_time=1)

@@ -42,12 +42,16 @@ def main(host_config_filename, targets_config_filename):
 	max_file_age_check_interval_seconds = int(config['max_file_age_check_interval_seconds'])
 	max_task_execution_time_seconds = int(config['max_task_execution_time_seconds'])
 	max_task_finalization_time_seconds = int(config['max_task_finalization_time_seconds'])
+	task_cleanup_interval_seconds = int(config['task_cleanup_interval_seconds'])
+	max_task_wait_seconds = int(config['max_task_wait_seconds'])
+	max_task_exist_days = int(config['max_task_exist_days'])
+
 
 	root = Flask(__name__)
 	root.config['host_description'] = config['host_description']
 	root.config['SEND_FILE_MAX_AGE_DEFAULT'] = 1
 
-	sendor_queue = SendorQueue(num_distribution_processes, queue_folder, max_task_execution_time_seconds, max_task_finalization_time_seconds)
+	sendor_queue = SendorQueue(num_distribution_processes, queue_folder, max_task_execution_time_seconds, max_task_finalization_time_seconds, task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days)
 	file_stash = FileStash(file_stash_folder, max_file_age_days, max_file_age_check_interval_seconds)
 	targets = Targets(config['targets'])
 

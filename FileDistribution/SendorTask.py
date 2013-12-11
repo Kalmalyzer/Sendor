@@ -45,9 +45,10 @@ class SendorTask(object):
 		self.log = ""
 		self.is_cancelable = False
 
-	def set_queue_info(self, task_id, work_directory):
+	def enqueued(self, task_id, work_directory):
 		self.task_id = task_id
 		self.work_directory = work_directory
+		self.enqueue_time = datetime.datetime.utcnow()
 		
 	def started(self):
 		self.state = self.STARTED

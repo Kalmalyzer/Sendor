@@ -1,9 +1,11 @@
 
+import datetime
 import logging
 import os
 import shutil
 import thread
 import threading
+import time
 import traceback
 import unittest
 
@@ -18,15 +20,21 @@ logger = logging.getLogger('SendorQueue')
 
 class SendorQueue(Observable):
 
-	class TaskNotFoundError(Exception):
+	class Error(Exception):
+		pass
+
+	class TaskNotFoundError(Error):
 		pass
 	
-	class TaskHasCompletedError(Exception):
+	class TaskHasCompletedError(Error):
+		pass
+		
+	class TaskHasNotCompletedError(Error):
 		pass
 	
 	unique_id = 0
 
-	def __init__(self, num_processes, work_directory, max_task_execution_time, max_task_finalization_time):
+	def __init__(self, num_processes, work_directory, max_task_execution_time, max_task_finalization_time, task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days):
 		super(SendorQueue, self).__init__()
 		self.num_processes = num_processes
 		self.work_directory = work_directory
@@ -55,6 +63,47 @@ class SendorQueue(Observable):
 		
 		self.worker.subscribe(notifier)
 
+		if task_cleanup_interval_seconds:
+			cleanup_thread = threading.Thread(target=(lambda self, task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days: self.cleanup_thread_func(task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days)), args=(self, task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days))
+			cleanup_thread.daemon = True
+			cleanup_thread.start()
+	
+	def cleanup_thread_func(self, task_cleanup_interval_seconds, max_task_wait_seconds, max_task_exist_days):
+		while True:
+			time.sleep(task_cleanup_interval_seconds)
+			now = datetime.datetime.utcnow()
+			tasks_to_cancel = []
+			tasks_to_remove = []
+			with self.tasks_lock:
+
+				max_nonprocessed_timedelta = datetime.timedelta(seconds=max_task_wait_seconds)
+				for task in self.nonprocessed_tasks:
+					age = now - task.enqueue_time
+					if age > max_nonprocessed_timedelta:
+						tasks_to_cancel.append(task)
+
+				max_exist_timedelta = datetime.timedelta(days=max_task_exist_days)
+				for task in self.tasks:
+					age = now - task.enqueue_time
+					if age > max_exist_timedelta:
+						tasks_to_remove.append(task)
+
+			for task in tasks_to_cancel:
+				try:
+					self.cancel(task)
+					logger.info("Cancelled task " + str(task.task_id) + " since it had been waiting for too long")
+				except Exception, e:
+					logger.error("Exception: " + e.message)
+					logger.error(traceback.format_exc())
+
+			for task in tasks_to_remove:
+				try:
+					self.remove(task)
+					logger.info("Removed task " + str(task.task_id) + " since it was too old")
+				except Exception, e:
+					logger.error("Exception: " + e.message)
+					logger.error(traceback.format_exc())
+
 	def process_next_task_if_available(self):
 		with self.tasks_lock:
 			if len(self.worker_tasks) < self.num_processes and self.nonprocessed_tasks:
@@ -67,7 +116,7 @@ class SendorQueue(Observable):
 		self.unique_id = self.unique_id + 1
 		task_work_directory = os.path.join(self.tasks_work_directory, str(task_id))
 		with self.tasks_lock:
-			task.set_queue_info(task_id, task_work_directory)
+			task.enqueued(task_id, task_work_directory)
 			self.nonprocessed_tasks.append(task)
 			self.tasks.append(task)
 			task.is_cancelable = True
@@ -117,13 +166,23 @@ class SendorQueue(Observable):
 			else:
 				raise self.TaskHasCompletedError("Task " + str(task.task_id) + " has already completed execution")
 
+	def remove(self, task):
+		with self.tasks_lock:
+			if not task in self.tasks:
+				raise self.TaskNotFoundError("Task " + str(task.task_id) + " does not exist in SendorQueue")
+			if task in self.nonprocessed_tasks or task in self.worker_tasks:
+				raise self.TaskHasNotCompletedError("Task " + str(task.task_id) + " has not completed processing in SendorQueue")
+			else:
+				self.tasks.remove(task)
+				self.notify(event_type='remove', task=task)
+
 class SendorQueueUnitTest(unittest.TestCase):
 
 	work_directory = 'unittest'
 
 	def setUp(self):
 		os.mkdir(self.work_directory)
-		self.sendor_queue = SendorQueue(num_processes=2, work_directory=self.work_directory, max_task_execution_time=10, max_task_finalization_time=1)
+		self.sendor_queue = SendorQueue(num_processes=2, work_directory=self.work_directory, max_task_execution_time=10, max_task_finalization_time=1, task_cleanup_interval_seconds=None, max_task_wait_seconds=None, max_task_exist_days=None)
 
 	def test_multiple_tasks(self):
 
@@ -135,7 +194,7 @@ class SendorQueueUnitTest(unittest.TestCase):
 		for i in range(5):
 			task = SendorTask()
 			task.actions = [DummySendorAction()]
-			task.set_queue_info(i, 'unittest/' + str(i))
+			task.enqueued(i, 'unittest/' + str(i))
 			tasks.append(task)
 
 		for task in tasks:
@@ -178,6 +237,7 @@ class SendorQueueUnitTest(unittest.TestCase):
 		self.sendor_queue.add(task)
 		self.sendor_queue.wait()
 		self.assertEquals(state.state, COMPLETED_TASK)
+		self.sendor_queue.remove(task)
 
 	def tearDown(self):
 		shutil.rmtree(self.work_directory)
