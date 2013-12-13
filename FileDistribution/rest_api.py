@@ -140,7 +140,7 @@ class ApiTestCase(unittest.TestCase):
 			self.targets = Targets(targets)
 
 		os.mkdir('unittest/file_stash')
-		self.file_stash = FileStash('unittest/file_stash', None)
+		self.file_stash = FileStash(root_path='unittest/file_stash', max_file_age_days=None, max_file_age_check_interval_seconds=None)
 		
 		root = Flask(__name__)
 		root.register_blueprint(url_prefix='/api', blueprint=create_rest_api(self.sendor_queue, self.targets, self.file_stash))
