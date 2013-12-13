@@ -143,17 +143,14 @@ class ParallelSftpSendFileAction(FabricAction):
 			source = context.translate_path(self.source)
 			max_parallel_transfers = int(self.target['max_parallel_transfers'])
 			num_chunks = max(self.min_chunks, min(self.max_chunks, int(self.size / int(self.target['chunk_size']))))
-			temp_directory = context.work_directory
-			temp_filename_prefix = 'chunk_'
-			temp_file_prefix = os.path.join(temp_directory, temp_filename_prefix)
 
 			context.activity("Connecting to SSH server")
 			host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
 			with settings(host_string=host_string, key_filename=self.target['private_key_file']):
-			
-				context.activity("Splitting original file into chunks")
-				self.fabric_local('split -d -n ' + str(num_chunks) + ' ' + source + ' ' + temp_file_prefix)
-				
+
+				context.activity("Creating file on target machine")
+				self.fabric_remote('truncate -s ' + str(self.size) + ' ' + self.filename)
+
 				context.activity("Transferring chunks using SFTP")
 
 				completion_ratio_lock = threading.Lock()
@@ -168,12 +165,25 @@ class ParallelSftpSendFileAction(FabricAction):
 					transport.connect(username = target['user'], pkey = key)
 					threadlocal.sftp = paramiko.SFTPClient.from_transport(transport)
 				
-				def transfer_file_thread(context, tempfile, targetfile, target):
-					threadlocal.sftp.put(tempfile, targetfile, callback=None)
-					with completion_ratio_lock:
-						context.completed_chunks += 1
-						ratio = context.completed_chunks / context.total_chunks
-						context.completion_ratio(ratio)
+				def transfer_file_thread(context, sourcefile, targetfile, offset, length):
+					with open(sourcefile, 'r') as inputfile:
+						with threadlocal.sftp.file(targetfile, 'a') as outputfile:
+							inputfile.seek(offset, 0)
+							outputfile.seek(offset, outputfile.SEEK_SET)
+							bytes_transferred = 0
+
+							while bytes_transferred < length:
+								block_size = 16384
+								if block_size > length - bytes_transferred:
+									block_size = length - bytes_transferred
+								data = inputfile.read(block_size)
+								outputfile.write(data)
+								bytes_transferred += block_size
+
+							with completion_ratio_lock:
+								context.completed_chunks += 1
+								ratio = context.completed_chunks / context.total_chunks
+								context.completion_ratio(ratio)
 
 				# Bugfix for http://bugs.python.org/issue10015
 				if not hasattr(threading.current_thread(), "_children"):
@@ -183,10 +193,9 @@ class ParallelSftpSendFileAction(FabricAction):
 					
 				results = []
 				for i in range(num_chunks):
-					temp_filename_suffix = u'%02d' % i
-					tempfile = temp_file_prefix + temp_filename_suffix
-					targetfile = temp_filename_prefix + temp_filename_suffix
-					results.append(thread_pool.apply_async(transfer_file_thread, (context, tempfile, targetfile, self.target)))
+					offset = (i * self.size) // num_chunks
+					length = ((i + 1) * self.size) // num_chunks - offset
+					results.append(thread_pool.apply_async(transfer_file_thread, (context, source, self.filename, offset, length)))
 
 				thread_pool.close()
 
@@ -194,10 +203,6 @@ class ParallelSftpSendFileAction(FabricAction):
 				for result in results:
 					result.get()
 
-				context.activity("Merging chunks to a single file")
-				self.fabric_remote('cat ' + temp_filename_prefix + '?? > ' + self.filename)
-				context.activity("Removing chunks")
-				self.fabric_remote('rm ' + temp_filename_prefix + '??')
 				context.activity("Validating file integrity")
 				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
 				if target_sha1sum != self.sha1sum:
@@ -271,7 +276,7 @@ class ParallelSftpSendFileActionUnitTest(unittest.TestCase):
 	source_path = upload_root + '/' + file_name
 	file_contents = 'abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890abcdefghijklmnopq1234567890'
 	sha1sum = '67b3642bc208372ead45399884da28c360fc6d36'
-	size = len(file_contents)
+	size = len(file_contents) + 1 # add 1 byte since the 'echo' command will append a \r to the file's contents
 	
 	def setUp(self):
 		os.mkdir(self.root_path)
