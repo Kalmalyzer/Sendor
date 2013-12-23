@@ -1,12 +1,15 @@
 import logging
 import json
+from threading import RLock
 from sockjs.tornado import SockJSConnection
 from backsync import signals
 
 class BacksyncModelRouter(SockJSConnection):
+    listeners_lock = RLock()
     listeners = set()
     active_session = None
     MODELS = {}
+    send_lock = RLock()
 
     @classmethod
     def register(cls, name, handler):
@@ -16,8 +19,9 @@ class BacksyncModelRouter(SockJSConnection):
         return self.MODELS.get(name, None)
 
     def on_open(self, request):
-        self.listeners.add(self)
-        self.__class__.active_session = self
+        with self.listeners_lock:
+            self.listeners.add(self)
+            self.__class__.active_session = self
 
         for cls in self.MODELS.values():
             obj = cls(self.session)
@@ -30,13 +34,14 @@ class BacksyncModelRouter(SockJSConnection):
             if hasattr(obj, 'on_close'):
                 obj.on_close()
 
-        self.listeners.remove(self)
-        if self.listeners:
-            s = self.listeners.pop()
-            self.listeners.add(s)
-        else :
-            s = None
-        self.__class__.active_session = s
+        with self.listeners_lock:
+            self.listeners.remove(self)
+            if self.listeners:
+                s = self.listeners.pop()
+                self.listeners.add(s)
+            else :
+                s = None
+            self.__class__.active_session = s
 
     def on_message(self, message):
         """
@@ -85,23 +90,29 @@ class BacksyncModelRouter(SockJSConnection):
             }
             if error :
                 response['error'] = error
-            self.send(response)
+
+            with BacksyncModelRouter.send_lock:
+                self.send(response)
 
     @classmethod
     def post_save(cls, model, serialized_instance):
         logging.debug("In post save handler model = %s" % (model))
         name = getattr(model, 'sync_name', model.__name__)
         message = {'event': "%s:%s" % (name, 'upsert'), 'data' : serialized_instance}
-        if cls.active_session:
-            cls.active_session.broadcast(BacksyncModelRouter.listeners, message)
+        with cls.listeners_lock:
+            if cls.active_session:
+                with cls.send_lock:
+                    cls.active_session.broadcast(BacksyncModelRouter.listeners, message)
 
     @classmethod
     def post_delete(cls, model, serialized_instance):
         logging.debug("In post delete handler model = %s" % (model))
         name = getattr(model, 'sync_name', model.__name__)
         message = {'event': "%s:%s" % (name, 'delete'), 'data' : serialized_instance}
-        if cls.active_session:
-            cls.active_session.broadcast(BacksyncModelRouter.listeners, message)
+        with cls.listeners_lock:
+            if cls.active_session:
+                with cls.send_lock:
+                    cls.active_session.broadcast(BacksyncModelRouter.listeners, message)
 
 #signals.post_save.connect(BacksyncModelRouter.post_save)
 #signals.post_delete.connect(BacksyncModelRouter.post_delete)
