@@ -1,0 +1,121 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>Jasmine Spec Runner v2.0.0</title>
+
+  <link rel="shortcut icon" type="image/png" href="../../jasmine-2.0.0/jasmine_favicon.png">
+  <link rel="stylesheet" type="text/css" href="../../jasmine-2.0.0/jasmine.css">
+
+  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine.js"></script>
+  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine-html.js"></script>
+  <script type="text/javascript" src="../../jasmine-2.0.0/boot.js"></script>
+  <script type="text/javascript" src="../../sinon-1.7.3/sinon-1.7.3.js"></script>
+
+  <!-- Dependent libraries -->
+  <script type="text/javascript" src="../../jquery-1.10.2/jquery-1.10.2.js"></script>
+  <script type="text/javascript" src="../../bootstrap-3.0.0/js/bootstrap.js"></script>
+  <script type="text/javascript" src="../../underscore-1.5.2/underscore.js"></script>
+  <script type="text/javascript" src="../../backbone-1.1.0/backbone.js"></script>
+
+  <!-- rendering templates -->
+<script id="SendorTaskView-template" type="text/template">
+	<% var completion_percentage = Math.round(100 * completion_ratio) %>
+	<td>
+		<% if (is_cancelable) { cancel_button_disabled_attribute = ''; } else { cancel_button_disabled_attribute = 'disabled="disabled"'; } %>
+		<button type="button" <%- cancel_button_disabled_attribute %> class="btn btn-primary cancel-button">Cancel</button>
+	</td>
+	<td>
+		<% if (duration) { %>
+			<%- description %>: <%- duration %>: <%- activity %>
+		<% } else { %>
+			<%- description %>
+		<% } %>
+
+		<% if (completion_percentage < 100) { progress_bar_classes = 'progress-striped active'; } else { progress_bar_classes = ''; } %>
+		<div class="progress <%- progress_bar_classes %>">
+			<div class="progress-bar" role="progressbar" aria-valuenow="<%- completion_percentage %>" aria-valuemin="0" aria-valuemax="100" style="width: <%- completion_percentage %>%">
+				<%- completion_percentage %>% Complete
+				<span class="sr-only">
+					<%- completion_percentage %>% Complete
+				</span>
+			</div>
+		</div>
+
+		<div>
+			<% if (log) { %>
+				<pre><%- log %></pre>
+			<% } %>
+		</div>		
+	</td>
+	<td>
+		<% if (state == 'not_started') { %>
+			<button type="button" disabled="disabled" class="btn btn-default">Not started</button>
+		<% } else if (state == 'in_progress') { %>
+			<button type="button" disabled="disabled" class="btn btn-warning">In progress</button>
+		<% } else if (state == 'completed') { %>
+			<button type="button" disabled="disabled" class="btn btn-success">Done</button>
+		<% } else if (state == 'failed') { %>
+			<button type="button" disabled="disabled" class="btn btn-danger">Failed</button>	
+		<% } else if (state == 'canceled') { %>
+			<button type="button" disabled="disabled" class="btn btn-info">Canceled</button>	
+		<% } else { %>
+			Error: Unknown state!
+		<% } %>
+	</td>
+</script>
+
+<script id="StashedFileView-template" type="text/template">
+	<td>
+		<button type="button" class="btn btn-default distribute-display-button">Distribute</button>
+
+		<% if (stashed_file.is_deletable) { %>
+			<button type="button" class="btn btn-default delete-button">Delete</button>
+		<% } else { %>
+			<button type="button" disabled="disabled" class="btn btn-default delete-button">Locked</button>
+		<% } %>
+
+		<div class="distribute-section" style="display:none">
+			<br>
+			<legend>Choose targets</legend>
+
+			<% _.each(targets, function(target) { %>
+				<label class="checkbox">
+					<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
+				</label>
+			<% }); %>
+			<br>
+			<label class="checkbox">
+				<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
+			</label>
+			<br>
+			<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
+		</div>
+	</td>
+	<td>
+		<%- stashed_file.original_filename %>
+	</td>
+	<td>
+		<%- stashed_file.size %>
+	</td>
+	<td>
+		<%- stashed_file.timestamp %>
+	</td>
+</script>
+
+  
+  <!-- include source files here... -->
+  <script type="text/javascript" src="../SendorTasks.js"></script>
+  <script type="text/javascript" src="../FileStash.js"></script>
+
+  <!-- include spec files here... -->
+  <script type="text/javascript" src="spec/FileStash.spec.js"></script>
+  <script type="text/javascript" src="spec/Targets.spec.js"></script>
+  <script type="text/javascript" src="spec/SendorTasks.spec.js"></script>
+  <script type="text/javascript" src="spec/SendorTasksView.spec.js"></script>
+
+</head>
+
+<body>
+</body>
+</html>
