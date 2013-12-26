@@ -43,25 +43,25 @@ var SendorTasksView = Backbone.View.extend({
 	className: "table table-striped",
 
 	initialize: function() {
+		this.taskViews = [];
 		this.listenTo(this.collection, 'add remove reset', this.render);
 	},
 
-    render: function() {
+	clear: function() {
 		this.$el.empty();
+		_.each(this.taskViews, function(taskView) { taskView.remove(); });
+		this.taskViews = [];
+	},
+	
+    render: function() {
+		this.clear();
+
 		this.collection.each(function(task) {
 				var taskView = new SendorTaskView({model: task});
+				this.taskViews.push(taskView);
 				taskView.render();
 				this.$el.prepend(taskView.el);
 			}, this);
 		return this;
 	}
 });
-
-
-var tasks = new SendorTasks();
-var tasksView = new SendorTasksView({collection: tasks});
-tasks.fetch({reset: true});
-
-$('#tasks').html(tasksView.el);
-
-//window.setInterval(function(){ tasks.fetch(); }, 10000);
