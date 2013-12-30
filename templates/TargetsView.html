@@ -1,0 +1,17 @@
+<script id="TargetsView-template" type="text/template">
+	<div>
+		<legend>Choose targets</legend>
+
+		<% _.each(targets, function(target) { %>
+			<label class="checkbox">
+				<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
+			</label>
+		<% }); %>
+		<br>
+		<label class="checkbox">
+			<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
+		</label>
+		<br>
+		<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
+	</div>
+</script>

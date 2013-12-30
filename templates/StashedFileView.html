@@ -2,36 +2,22 @@
 	<td>
 		<button type="button" class="btn btn-default distribute-display-button">Distribute</button>
 
-		<% if (stashed_file.is_deletable) { %>
+		<% if (is_deletable) { %>
 			<button type="button" class="btn btn-default delete-button">Delete</button>
 		<% } else { %>
 			<button type="button" disabled="disabled" class="btn btn-default delete-button">Locked</button>
 		<% } %>
 
 		<div class="distribute-section" style="display:none">
-			<br>
-			<legend>Choose targets</legend>
-
-			<% _.each(targets, function(target) { %>
-				<label class="checkbox">
-					<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
-				</label>
-			<% }); %>
-			<br>
-			<label class="checkbox">
-				<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
-			</label>
-			<br>
-			<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
 		</div>
 	</td>
 	<td>
-		<%- stashed_file.original_filename %>
+		<%- original_filename %>
 	</td>
 	<td>
-		<%- stashed_file.size %>
+		<%- size %>
 	</td>
 	<td>
-		<%- stashed_file.timestamp %>
+		<%- timestamp %>
 	</td>
 </script>

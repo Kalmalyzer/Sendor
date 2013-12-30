@@ -7,16 +7,22 @@
   <link rel="shortcut icon" type="image/png" href="../../jasmine-2.0.0/jasmine_favicon.png">
   <link rel="stylesheet" type="text/css" href="../../jasmine-2.0.0/jasmine.css">
 
-  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine.js"></script>
-  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine-html.js"></script>
-  <script type="text/javascript" src="../../jasmine-2.0.0/boot.js"></script>
-  <script type="text/javascript" src="../../sinon-1.7.3/sinon-1.7.3.js"></script>
-
   <!-- Dependent libraries -->
   <script type="text/javascript" src="../../jquery-1.10.2/jquery-1.10.2.js"></script>
   <script type="text/javascript" src="../../bootstrap-3.0.0/js/bootstrap.js"></script>
   <script type="text/javascript" src="../../underscore-1.5.2/underscore.js"></script>
   <script type="text/javascript" src="../../backbone-1.1.0/backbone.js"></script>
+  <script type="text/javascript" src="../../sockjs-0.3.4/sockjs-0.3.4.js"></script>
+  <script type="text/javascript" src="../../backsync/alea.js"></script>
+  <script type="text/javascript" src="../../backsync/Math.uuid.js"></script>
+  <script type="text/javascript" src="../../backsync/backsync.js"></script>
+
+  <!-- Testing libraries -->
+  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine.js"></script>
+  <script type="text/javascript" src="../../jasmine-2.0.0/jasmine-html.js"></script>
+  <script type="text/javascript" src="../../jasmine-2.0.0/boot.js"></script>
+  <script type="text/javascript" src="../../sinon-1.7.3/sinon-1.7.3.js"></script>
+  <script type="text/javascript" src="../../jasmine-jquery-support-jasmine-v2/jasmine-jquery.js"></script>
 
   <!-- rendering templates -->
 <script id="SendorTaskView-template" type="text/template">
@@ -69,48 +75,54 @@
 	<td>
 		<button type="button" class="btn btn-default distribute-display-button">Distribute</button>
 
-		<% if (stashed_file.is_deletable) { %>
+		<% if (is_deletable) { %>
 			<button type="button" class="btn btn-default delete-button">Delete</button>
 		<% } else { %>
 			<button type="button" disabled="disabled" class="btn btn-default delete-button">Locked</button>
 		<% } %>
 
 		<div class="distribute-section" style="display:none">
-			<br>
-			<legend>Choose targets</legend>
-
-			<% _.each(targets, function(target) { %>
-				<label class="checkbox">
-					<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
-				</label>
-			<% }); %>
-			<br>
-			<label class="checkbox">
-				<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
-			</label>
-			<br>
-			<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
 		</div>
 	</td>
 	<td>
-		<%- stashed_file.original_filename %>
+		<%- original_filename %>
 	</td>
 	<td>
-		<%- stashed_file.size %>
+		<%- size %>
 	</td>
 	<td>
-		<%- stashed_file.timestamp %>
+		<%- timestamp %>
 	</td>
 </script>
 
-  
+<script id="TargetsView-template" type="text/template">
+	<div>
+		<legend>Choose targets</legend>
+
+		<% _.each(targets, function(target) { %>
+			<label class="checkbox">
+				<input type="checkbox" value="<%- target.target_id %>" checked><%- target.name %>
+			</label>
+		<% }); %>
+		<br>
+		<label class="checkbox">
+			<input type="checkbox" class="toggle-all-targets-button" value="selectAll" checked>Select/Deselect All
+		</label>
+		<br>
+		<button type="button" class="btn btn-default distribute-submit-button">Distribute!</button>
+	</div>
+</script>
+
   <!-- include source files here... -->
   <script type="text/javascript" src="../SendorTasks.js"></script>
   <script type="text/javascript" src="../FileStash.js"></script>
+  <script type="text/javascript" src="../Targets.js"></script>
 
   <!-- include spec files here... -->
   <script type="text/javascript" src="spec/FileStash.spec.js"></script>
+  <script type="text/javascript" src="spec/FileStashView.spec.js"></script>
   <script type="text/javascript" src="spec/Targets.spec.js"></script>
+  <script type="text/javascript" src="spec/TargetsView.spec.js"></script>
   <script type="text/javascript" src="spec/SendorTasks.spec.js"></script>
   <script type="text/javascript" src="spec/SendorTasksView.spec.js"></script>
 

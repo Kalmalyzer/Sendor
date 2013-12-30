@@ -13,11 +13,12 @@
 <div id="tasks">
 </div>
 
-<script src="/static/underscore-1.5.2/underscore-min.js"></script>
-<script src="/static/backbone-1.1.0/backbone-min.js"></script>
+<script src="/static/underscore-1.5.2/underscore.js"></script>
+<script src="/static/backbone-1.1.0/backbone.js"></script>
 
 {% include "StashedFileView.html" %}
 {% include "SendorTaskView.html" %}
+{% include "TargetsView.html" %}
 
 <script src="/static/sockjs-0.3.4/sockjs-0.3.4.js"></script>
 <script src="/static/backsync/alea.js"></script>
@@ -25,6 +26,7 @@
 <script src="/static/backsync/backsync.js"></script>
 <script src="/static/sendor/SendorTasks.js"></script>
 <script src="/static/sendor/FileStash.js"></script>
+<script src="/static/sendor/Targets.js"></script>
 <script src="/static/sendor/main.js"></script>
 
 {% endblock %}
