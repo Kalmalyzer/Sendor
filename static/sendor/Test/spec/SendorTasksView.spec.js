@@ -5,13 +5,39 @@ describe("SendorTaskView & SendorTasksView", function() {
 	describe("SendorTaskView", function() {
 		
 		beforeEach(function() {
-			var sendorTask = new SendorTask({task_id: 5 });
+			var sendorTask = new SendorTask({task_id: 1, is_cancelable: true, completion_ratio: 0, duration: 0, description: "Task 1", log: "log message", state: 'not_started'});
 			this.sendorTaskView = new SendorTaskView({model: sendorTask});
 		});
 
 		describe("Instantiation", function() {
 			it("Should create a table row", function() {
 				expect(this.sendorTaskView.el.nodeName).toEqual('TR');
+			});
+		});
+		
+		describe("Rendering", function() {
+			it("Should hide/show the log when clicking the up/down arrow", function() {
+				
+				this.sendorTaskView.render();
+
+				{
+					var logSection = this.sendorTaskView.$el.find('.log');
+					expect(logSection).toHaveCss({display: 'none'});
+				}
+
+				{
+					var logArrow = this.sendorTaskView.$el.find('.toggle-log');
+					logArrow.click();
+					var logSection = this.sendorTaskView.$el.find('.log');
+					expect(logSection).not.toHaveCss({display: 'none'});
+				}
+
+				{
+					var logArrow = this.sendorTaskView.$el.find('.toggle-log');
+					logArrow.click();
+					var logSection = this.sendorTaskView.$el.find('.log');
+					expect(logSection).toHaveCss({display: 'none'});
+				}
 			});
 		});
 	});

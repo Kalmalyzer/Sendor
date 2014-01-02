@@ -5,6 +5,15 @@
 		<button type="button" <%- cancel_button_disabled_attribute %> class="btn btn-primary cancel-button">Cancel</button>
 	</td>
 	<td>
+		<h2 class="toggle-log">
+			<% if (show_log) { %>
+				&#9650;
+			<% } else { %>
+				&#9660;
+			<% } %>
+		</h2>
+	</td>
+	<td>
 		<% if (duration) { %>
 			<%- description %>: <%- duration %>: <%- activity %>
 		<% } else { %>
@@ -21,7 +30,8 @@
 			</div>
 		</div>
 
-		<div>
+		<% if (show_log) { show_log_styles = ''; } else { show_log_styles = 'display: none'; } %>
+		<div class="log" style="<%- show_log_styles %>">
 			<% if (log) { %>
 				<pre><%- log %></pre>
 			<% } %>

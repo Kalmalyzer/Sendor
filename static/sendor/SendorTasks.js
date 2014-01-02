@@ -1,7 +1,11 @@
 'use strict';
 
 var SendorTask = Backbone.Model.extend({
-	idAttribute: "task_id"
+	idAttribute: "task_id",
+	
+	initialize: function() {
+		this.set('show_log', false);
+	}
 });
 
 var SendorTasks = Backsync.Collection.extend({
@@ -15,7 +19,8 @@ var SendorTaskView = Backbone.View.extend({
 	template: _.template($('#SendorTaskView-template').html()),
 	
 	events: {
-		"click .cancel-button": "cancelRequest"
+		"click .cancel-button": "cancelRequest",
+		"click .toggle-log": "toggleLog"
 	},
 
 	initialize: function() {
@@ -35,6 +40,10 @@ var SendorTaskView = Backbone.View.extend({
 	cancelRequest: function() {
 		$.ajax({ url: this.model.url() + '/cancel',
 			type: 'PUT' });
+	},
+	
+	toggleLog: function() {
+		this.model.set('show_log', !this.model.get('show_log'));
 	}
 });
 
