@@ -165,7 +165,7 @@ class ParallelSftpSendFileAction(FabricAction):
 				
 				def transfer_file_thread(context, sourcefile, targetfile, offset, length):
 					with open(sourcefile, 'r') as inputfile:
-						with threadlocal.sftp.file(targetfile, 'a') as outputfile:
+						with threadlocal.sftp.file(targetfile, 'r+') as outputfile:
 							inputfile.seek(offset, 0)
 							outputfile.seek(offset, outputfile.SEEK_SET)
 							bytes_transferred = 0
@@ -204,8 +204,8 @@ class ParallelSftpSendFileAction(FabricAction):
 				context.activity("Validating file integrity")
 				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
 				if target_sha1sum != self.sha1sum:
-					self.fabric_remote('rm ' + self.filename)
-					context.activity("File corrupted during transfer; removed from target location")
+					#self.fabric_remote('rm ' + self.filename)
+					#context.activity("File corrupted during transfer; removed from target location")
 					raise Exception("File corrupted during transfer")
 
 			context.activity("Transfer complete")
