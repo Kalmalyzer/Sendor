@@ -20,8 +20,8 @@ threadlocal = threading.local()
 
 class FabricAction(SendorAction):
 
-	def __init__(self):
-		super(FabricAction, self).__init__()
+	def __init__(self, completion_weight):
+		super(FabricAction, self).__init__(completion_weight)
 
 	def fabric_local(self, command):
 		with fabric.api.settings(warn_only=True):
@@ -42,7 +42,7 @@ class FabricAction(SendorAction):
 class CopyFileAction(FabricAction):
 
 	def __init__(self, source, sha1sum, size, target):
-		super(CopyFileAction, self).__init__()
+		super(CopyFileAction, self).__init__(completion_weight=50)
 		self.source = source
 		self.target = target
 
@@ -52,12 +52,11 @@ class CopyFileAction(FabricAction):
 		target = context.translate_path(self.target)
 		self.fabric_local('cp ' + source + ' ' + target)
 		context.activity("Copy completed")
-		context.completion_ratio(1.0)
 
 class TestIfFileUpToDateOnTargetAction(FabricAction):
 
 	def __init__(self, filename, sha1sum, target):
-		super(TestIfFileUpToDateOnTargetAction, self).__init__()
+		super(TestIfFileUpToDateOnTargetAction, self).__init__(completion_weight=10)
 		self.filename = filename
 		self.sha1sum = sha1sum
 		self.target = target
@@ -75,7 +74,6 @@ class TestIfFileUpToDateOnTargetAction(FabricAction):
 
 			if target_sha1sum == self.sha1sum:
 				context.activity("Remote file is up-to-date; skipping transfer")
-				context.completion_ratio(1.0)
 				context.file_up_to_date_on_target = True
 			else:
 				context.activity("Remote file is not up-to-date")
@@ -84,7 +82,7 @@ class TestIfFileUpToDateOnTargetAction(FabricAction):
 class SftpSendFileAction(FabricAction):
 
 	def __init__(self, source, filename, sha1sum, size, target):
-		super(SftpSendFileAction, self).__init__()
+		super(SftpSendFileAction, self).__init__(completion_weight=100)
 		self.source = source
 		self.filename = filename
 		self.sha1sum = sha1sum
@@ -129,7 +127,7 @@ class ParallelSftpSendFileAction(FabricAction):
 	max_chunks = 99
 
 	def __init__(self, source, filename, sha1sum, size, target):
-		super(ParallelSftpSendFileAction, self).__init__()
+		super(ParallelSftpSendFileAction, self).__init__(completion_weight=100)
 		self.source = source
 		self.filename = filename
 		self.sha1sum = sha1sum

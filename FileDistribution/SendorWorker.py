@@ -64,8 +64,9 @@ class SendorWorkerActionContext(SendorActionContext):
 	def activity(self, activity):
 		self.worker_task.enqueue_activity(activity)
 
-	def completion_ratio(self, completion_ratio):
-		self.worker_task.enqueue_completion_ratio(completion_ratio)
+	def completion_ratio(self, action_completion_ratio):
+		task_completion_ratio = float(self.completion_weight_action_start + (self.completion_weight_action_end - self.completion_weight_action_start) * action_completion_ratio) / self.completion_weight_total
+		self.worker_task.enqueue_completion_ratio(task_completion_ratio)
 
 	def log(self, log):
 		self.worker_task.enqueue_log(log)
@@ -108,8 +109,17 @@ class SendorWorkerTask(Observable):
 		try:
 			self.enqueue_status('started')
 			self.enqueue_log("Task execution started")
-			for action in actions:
-				action.run(context)
+			if actions:
+				context.completion_weight_action_start = 0
+				context.completion_weight_action_end = 0
+				context.completion_weight_total = sum([action.completion_weight for action in actions])
+				
+				for action in actions:
+					context.completion_weight_action_end += action.completion_weight
+					context.completion_ratio(0)
+					action.run(context)
+					context.completion_ratio(1.0)
+					context.completion_weight_action_start += action.completion_weight
 			self.enqueue_status('completed')
 			self.enqueue_log("Task execution completed")
 		except:
@@ -292,12 +302,16 @@ class SendorWorker(Observable):
 			self.notify(event_type='change', task=task)
 
 class DummySendorAction(SendorAction):
+
+	def __init__(self):
+		super(DummySendorAction, self).__init__(completion_weight=10)
+				
 	def run(self, context):
 		context.activity("Dummy action initiated")
 		context.completion_ratio(0.1)
 		context.completion_ratio(0.9)
 		context.activity("Dummy action completed")
-			
+
 class SendorTaskProcessUnitTest(unittest.TestCase):
 
 	def setUp(self):

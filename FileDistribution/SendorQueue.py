@@ -187,6 +187,10 @@ class SendorQueueUnitTest(unittest.TestCase):
 	def test_multiple_tasks(self):
 
 		class DummySendorAction(SendorAction):
+		
+			def __init__(self):
+				super(DummySendorAction, self).__init__(completion_weight=10)
+				
 			def run(self, context):
 				context.activity("Dummy action invoked")
 

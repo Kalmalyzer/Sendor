@@ -147,7 +147,7 @@ class SendorActionContext(object):
 		return
 
 	@abstractmethod
-	def completion_ratio(self, completion_ratio):
+	def completion_ratio(self, action_completion_ratio):
 		return
 
 	@abstractmethod
@@ -156,6 +156,9 @@ class SendorActionContext(object):
 
 class SendorAction(object):
 	__metaclass__ = ABCMeta
+
+	def __init__(self, completion_weight):
+		self.completion_weight = completion_weight
 	
 	@abstractmethod
 	def run(self, context):

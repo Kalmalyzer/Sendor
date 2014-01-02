@@ -16,6 +16,7 @@ distribution_logger = logging.getLogger('main.distribution')
 
 class LogDistributionAction(SendorAction):
 	def __init__(self, type, filename, target):
+		super(LogDistributionAction, self).__init__(completion_weight=10)
 		self.description = type
 		self.filename = filename
 		self.target = target
