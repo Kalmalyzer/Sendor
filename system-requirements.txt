@@ -1,0 +1,2 @@
+Python 2.7.5 or newer
+PhantomJS 1.9.0 or newer
