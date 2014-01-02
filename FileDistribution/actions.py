@@ -204,8 +204,8 @@ class ParallelSftpSendFileAction(FabricAction):
 				context.activity("Validating file integrity")
 				target_sha1sum = self.fabric_remote('sha1sum -b ' + self.filename)[:40]
 				if target_sha1sum != self.sha1sum:
-					#self.fabric_remote('rm ' + self.filename)
-					#context.activity("File corrupted during transfer; removed from target location")
+					self.fabric_remote('rm ' + self.filename)
+					context.activity("File corrupted during transfer; removed from target location")
 					raise Exception("File corrupted during transfer")
 
 			context.activity("Transfer complete")
