@@ -96,7 +96,7 @@ class SftpSendFileAction(FabricAction):
 			def cb(transferred, total):
 				self.transferred = transferred
 				self.total = total
-				ratio = self.transferred / self.total
+				ratio = float(self.transferred) / self.total
 				context.completion_ratio(ratio)
 
 			context.activity("Connecting to SSH server")
@@ -153,8 +153,8 @@ class ParallelSftpSendFileAction(FabricAction):
 
 				completion_ratio_lock = threading.Lock()
 				
-				context.completed_chunks = 0
-				context.total_chunks = num_chunks
+				context.transmitted_size = 0
+				context.total_size = self.size
 				
 				def transfer_file_thread_initializer(target):
 					key_file = target['private_key_file']
@@ -178,10 +178,10 @@ class ParallelSftpSendFileAction(FabricAction):
 								outputfile.write(data)
 								bytes_transferred += block_size
 
-							with completion_ratio_lock:
-								context.completed_chunks += 1
-								ratio = context.completed_chunks / context.total_chunks
-								context.completion_ratio(ratio)
+								with completion_ratio_lock:
+									context.transmitted_size += block_size
+									ratio = float(context.transmitted_size) / context.total_size
+									context.completion_ratio(ratio)
 
 				# Bugfix for http://bugs.python.org/issue10015
 				if not hasattr(threading.current_thread(), "_children"):
