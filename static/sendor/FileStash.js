@@ -58,15 +58,24 @@ var FileStashView = Backbone.View.extend({
 	className: 'table table-bordered table-hover',
 
 	initialize: function(fileStash, targets) {
+		this.stashedFileViews = [];
 		this.fileStash = fileStash;
 		this.targets = targets;
 		this.listenTo(this.fileStash, 'add remove reset', this.render);
 	},
 
-    render: function() {
+	clear: function() {
 		this.$el.empty();
+		_.each(this.stashedFileViews, function(stashedFileView) { stashedFileView.remove(); });
+		this.stashedFileViews = [];
+	},
+	
+    render: function() {
+		this.clear();
+		
 		this.fileStash.each(function(stashedFile) {
 			var stashedFileView = new StashedFileView(stashedFile, this.targets);
+			this.stashedFileViews.push(stashedFileView);
 			stashedFileView.render();
 			this.$el.append(stashedFileView.el);
 			}, this);
