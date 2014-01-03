@@ -1,4 +1,5 @@
 
+import datetime
 import logging
 import json
 import multiprocessing.pool
@@ -81,6 +82,8 @@ class TestIfFileUpToDateOnTargetAction(FabricAction):
 
 class SftpSendFileAction(FabricAction):
 
+	completion_ratio_update_interval = datetime.timedelta(seconds=1)
+	
 	def __init__(self, source, filename, sha1sum, size, target):
 		super(SftpSendFileAction, self).__init__(completion_weight=100)
 		self.source = source
@@ -96,8 +99,11 @@ class SftpSendFileAction(FabricAction):
 			def cb(transferred, total):
 				self.transferred = transferred
 				self.total = total
-				ratio = float(self.transferred) / self.total
-				context.completion_ratio(ratio)
+				now = datetime.datetime.utcnow()
+				if (now - context.completion_ratio_update_timestamp) >= self.completion_ratio_update_interval:
+					context.completion_ratio_update_timestamp = now
+					ratio = float(self.transferred) / self.total
+					context.completion_ratio(ratio)
 
 			context.activity("Connecting to SSH server")
 			host_string = self.target['user'] + '@' + self.target['host'] + ':' + self.target['port']
@@ -109,6 +115,7 @@ class SftpSendFileAction(FabricAction):
 				transport = paramiko.Transport((self.target['host'], int(self.target['port'])))
 				transport.connect(username = self.target['user'], pkey = key)
 				context.activity("Transferring file via SFTP")
+				context.completion_ratio_update_timestamp = datetime.datetime.utcnow()
 				sftp = paramiko.SFTPClient.from_transport(transport)
 				sftp.put(source_path, self.filename, callback=cb)
 
@@ -125,6 +132,7 @@ class ParallelSftpSendFileAction(FabricAction):
 
 	min_chunks = 1
 	max_chunks = 99
+	completion_ratio_update_interval = datetime.timedelta(seconds=1)
 
 	def __init__(self, source, filename, sha1sum, size, target):
 		super(ParallelSftpSendFileAction, self).__init__(completion_weight=100)
@@ -155,6 +163,7 @@ class ParallelSftpSendFileAction(FabricAction):
 				
 				context.transmitted_size = 0
 				context.total_size = self.size
+				context.completion_ratio_update_timestamp = datetime.datetime.utcnow()
 				
 				def transfer_file_thread_initializer(target):
 					key_file = target['private_key_file']
@@ -180,8 +189,11 @@ class ParallelSftpSendFileAction(FabricAction):
 
 								with completion_ratio_lock:
 									context.transmitted_size += block_size
-									ratio = float(context.transmitted_size) / context.total_size
-									context.completion_ratio(ratio)
+									now = datetime.datetime.utcnow()
+									if (now - context.completion_ratio_update_timestamp) >= self.completion_ratio_update_interval:
+										context.completion_ratio_update_timestamp = now
+										ratio = float(context.transmitted_size) / context.total_size
+										context.completion_ratio(ratio)
 
 				# Bugfix for http://bugs.python.org/issue10015
 				if not hasattr(threading.current_thread(), "_children"):
