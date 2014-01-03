@@ -133,6 +133,7 @@ class ParallelSftpSendFileAction(FabricAction):
 	min_chunks = 1
 	max_chunks = 99
 	completion_ratio_update_interval = datetime.timedelta(seconds=1)
+	block_size = 16384
 
 	def __init__(self, source, filename, sha1sum, size, target):
 		super(ParallelSftpSendFileAction, self).__init__(completion_weight=100)
@@ -180,7 +181,7 @@ class ParallelSftpSendFileAction(FabricAction):
 							bytes_transferred = 0
 
 							while bytes_transferred < length:
-								block_size = 16384
+								block_size = self.block_size
 								if block_size > length - bytes_transferred:
 									block_size = length - bytes_transferred
 								data = inputfile.read(block_size)
